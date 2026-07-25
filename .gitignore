@@ -1,0 +1,20 @@
+# Segredos e configuração local — nunca vai pro repositório público.
+.env
+
+# Banco de dados local (SQLite).
+*.db
+
+# Arquivos enviados pelos usuários pela própria aplicação.
+uploads/
+
+# Pasta de convenção para guardar editais reais fora da pasta uploads/,
+# por exemplo durante testes manuais. Nunca deve ir pro Git.
+editais-reais/
+
+# Arquivos gerados pelo Python.
+__pycache__/
+*.pyc
+
+# Ambientes virtuais.
+venv/
+.venv/

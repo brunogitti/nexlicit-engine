@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pymupdf
+python-docx
+jinja2
+python-multipart
+python-dotenv
+
+# dependência de desenvolvimento (rodar os testes)
+pytest

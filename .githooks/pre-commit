@@ -1,0 +1,21 @@
+#!/bin/sh
+# Hook de pré-commit: roda o gitleaks para bloquear um commit que contenha
+# algo parecido com segredo (chave de API, token etc.) nos arquivos staged.
+#
+# Este script mora em .githooks/ (versionado no git) porque a pasta padrão
+# .git/hooks/ NÃO vai pro repositório. Para ativar depois de clonar, rode
+# uma vez:
+#   git config core.hooksPath .githooks
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "[pre-commit] aviso: gitleaks nao encontrado no PATH — commit NAO foi verificado contra segredos."
+    echo "[pre-commit] instale com: winget install Gitleaks.Gitleaks"
+    exit 0
+fi
+
+if ! gitleaks protect --staged --redact --verbose; then
+    echo ""
+    echo "[pre-commit] commit bloqueado: o gitleaks encontrou algo que parece um segredo."
+    echo "[pre-commit] revise os arquivos staged (git diff --staged) antes de tentar de novo."
+    exit 1
+fi
