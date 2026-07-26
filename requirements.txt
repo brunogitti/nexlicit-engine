@@ -5,6 +5,7 @@ python-docx
 jinja2
 python-multipart
 python-dotenv
+google-genai
 
 # dependência de desenvolvimento (rodar os testes)
 pytest
