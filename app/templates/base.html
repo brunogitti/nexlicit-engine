@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block titulo %}NexLicit Engine{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', path='/css/nexlicit.css') }}">
+</head>
+<body>
+
+<svg style="position:absolute; width:0; height:0; overflow:hidden;" aria-hidden="true">
+  <symbol id="icon-logo-mark" viewBox="0 0 30 30">
+    <rect x="1" y="1" width="28" height="28" rx="8" fill="#12233D"/>
+    <path d="M8 16 12.5 20.5 22 9.5" stroke="#A2782A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </symbol>
+</svg>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="/">
+        <span class="logo-mark"><svg width="28" height="28" aria-hidden="true" focusable="false"><use href="#icon-logo-mark"/></svg></span>
+        <span class="logo-text">
+          <span class="logo-word">NexLicit Engine</span>
+          <span class="logo-tag">PREGOEIRO. FORNECEDOR. HOJE, DO SEU LADO.</span>
+        </span>
+      </a>
+      <a class="btn btn-primary" href="/processos/novo">+ Novo processo</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  {% block conteudo %}{% endblock %}
+</main>
+
+<footer>
+  <div class="wrap">
+    <span class="mono">NexLicit Engine — analisador de editais (Lei 14.133/2021)</span>
+  </div>
+</footer>
+
+</body>
+</html>

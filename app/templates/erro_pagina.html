@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block titulo %}Não encontrado — NexLicit Engine{% endblock %}
+{% block conteudo %}
+
+<div class="estado-vazio">
+  <span class="eyebrow" style="color:var(--stamp);">Não encontrado</span>
+  <h2>{{ mensagem }}</h2>
+  <p class="lead" style="margin:0 auto 22px;">Confira o link ou volte para a lista de processos.</p>
+  <a class="btn btn-primary" href="/">Ver processos</a>
+</div>
+
+{% endblock %}

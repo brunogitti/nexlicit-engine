@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block titulo %}{{ processo.nome }} — NexLicit Engine{% endblock %}
+{% block conteudo %}
+
+<div class="cabecalho-processo">
+  <span class="eyebrow">Checklist de habilitação</span>
+  <h1>{{ processo.nome }}</h1>
+
+  <dl class="dados-processo mono">
+    {% if processo.orgao %}<div><dt>Órgão</dt><dd>{{ processo.orgao }}</dd></div>{% endif %}
+    {% if processo.objeto %}<div><dt>Objeto</dt><dd>{{ processo.objeto }}</dd></div>{% endif %}
+    {% if processo.modalidade %}<div><dt>Modalidade</dt><dd>{{ processo.modalidade }}</dd></div>{% endif %}
+    {% if processo.valor_estimado %}<div><dt>Valor estimado</dt><dd>R$ {{ "%.2f"|format(processo.valor_estimado) }}</dd></div>{% endif %}
+    {% if processo.data_sessao %}<div><dt>Data da sessão</dt><dd>{{ processo.data_sessao }}</dd></div>{% endif %}
+  </dl>
+
+  <div class="barra-progresso-wrap">
+    <div class="barra-progresso" role="progressbar"
+         aria-valuenow="{{ feitas }}" aria-valuemin="0" aria-valuemax="{{ total }}"
+         aria-label="Progresso do checklist">
+      <div class="barra-progresso-preenchida" id="barra-preenchida" style="width: {{ percentual }}%;"></div>
+    </div>
+    <span class="barra-progresso-texto mono" id="progresso-texto">{{ feitas }} de {{ total }} exigências conferidas</span>
+  </div>
+</div>
+
+<!-- Fase 2, Camada 2: perguntas em linguagem natural sobre o edital.
+     Sem histórico no banco de propósito — cada pergunta fica só na memória
+     desta página (perguntas.js), some ao recarregar. data-processo-id é
+     como o JS externo (arquivo estático, sem Jinja) recebe o id do
+     processo — mesma técnica já usada em data-exigencia-ids nos cards. -->
+<section class="secao-perguntas" id="secao-perguntas" data-processo-id="{{ processo.id }}">
+  <span class="eyebrow">Pergunte sobre o edital</span>
+  <h2>Perguntas em linguagem natural</h2>
+  <p class="nota-discreta">A resposta é gerada a partir do texto completo do edital, sempre citando a página de onde veio. Sem histórico salvo — as perguntas ficam só nesta tela, enquanto ela estiver aberta.</p>
+
+  <form class="form-pergunta" id="form-pergunta">
+    <input type="text" id="campo-pergunta" name="pergunta" placeholder="Ex.: Qual é o prazo de validade da proposta?" required>
+    <button type="submit" class="btn btn-primary">Perguntar</button>
+  </form>
+
+  <div class="pergunta-carregando" id="pergunta-carregando" hidden>
+    <div class="spinner spinner-pequeno" role="status" aria-live="polite" aria-label="Buscando resposta"></div>
+    <span>Buscando resposta no edital…</span>
+  </div>
+
+  <!-- Erro de verdade (rede, 500, 502...) — mesma linguagem visual do
+       aviso-salvamento já usado pra falha ao gravar checkbox/nota, só que
+       inline (não sticky) porque fica no meio da página, não no topo. -->
+  <div class="aviso-salvamento aviso-salvamento--inline" id="aviso-erro-pergunta" role="alert" hidden></div>
+
+  <div class="lista-pergunta-resposta" id="lista-pergunta-resposta"></div>
+</section>
+
+<!-- Fase 2, Camada 2: motor de inconsistências edital-vs-TR. Diferente da
+     seção de perguntas, o resultado é PERSISTIDO (tabela inconsistencia +
+     colunas inconsistencias_* em processo, ver app/rotas/paginas.py,
+     _estado_inconsistencias) — por isso já vem pronto do servidor no
+     primeiro carregamento, não depende de clicar em nada. O botão só
+     redispara uma verificação nova (ex.: depois de corrigir algo no
+     processo). Reaproveita a classe .secao-perguntas pro visual da caixa
+     (mesmo container "boxed section" das duas seções). -->
+<section class="secao-perguntas secao-inconsistencias" id="secao-inconsistencias" data-processo-id="{{ processo.id }}">
+  <span class="eyebrow">Edital vs. Termo de Referência</span>
+  <h2>Inconsistências entre o edital e o TR</h2>
+  <p class="nota-discreta">Compara o corpo do edital com o Termo de Referência embutido, buscando contradições reais — só conta um achado quando há um trecho literal de cada lado que realmente se contradiga.</p>
+
+  {% if inconsistencias.estado == "nunca_verificado" %}
+  <p class="estado-inconsistencias-neutro">Ainda não verificado.</p>
+
+  {% elif inconsistencias.estado == "nao_possivel" %}
+  <div class="aviso-limitacao">
+    <span class="eyebrow">Comparação não possível</span>
+    <p>{{ inconsistencias.motivo }}</p>
+  </div>
+
+  {% elif inconsistencias.estado == "sem_achados" %}
+  <div class="estado-inconsistencias-ok">
+    <span class="eyebrow">✓ Nenhuma inconsistência encontrada</span>
+    <p>O corpo do edital e o Termo de Referência não apresentaram contradições detectáveis nesta verificação.</p>
+  </div>
+
+  {% elif inconsistencias.estado == "com_achados" %}
+  <div class="lista-inconsistencias">
+    {% for grupo in inconsistencias.grupos %}
+    <div class="categoria-inconsistencia">
+      <h3>{{ grupo.rotulo }} <span class="contador-categoria mono">{{ grupo.achados|length }}</span></h3>
+      {% for achado in grupo.achados %}
+      <article class="card-exigencia card-inconsistencia">
+        <p class="card-exigencia-descricao">{{ achado.descricao }}</p>
+        <div class="par-trechos">
+          <div class="trecho-lado">
+            <span class="eyebrow">Edital</span>
+            <blockquote class="trecho">
+              <p>{{ achado.trecho_edital }}</p>
+              {% if achado.pagina_edital %}<cite>página {{ achado.pagina_edital }}</cite>{% endif %}
+            </blockquote>
+          </div>
+          <div class="trecho-lado">
+            <span class="eyebrow">Termo de Referência</span>
+            <blockquote class="trecho">
+              <p>{{ achado.trecho_tr }}</p>
+              {% if achado.pagina_tr %}<cite>página {{ achado.pagina_tr }}</cite>{% endif %}
+            </blockquote>
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="pergunta-carregando" id="inconsistencias-carregando" hidden>
+    <div class="spinner spinner-pequeno" role="status" aria-live="polite" aria-label="Verificando inconsistências"></div>
+    <span>Comparando edital e Termo de Referência…</span>
+  </div>
+
+  <div class="aviso-salvamento aviso-salvamento--inline" id="aviso-erro-inconsistencias" role="alert" hidden></div>
+
+  <button type="button" class="btn btn-ghost" id="btn-verificar-inconsistencias">
+    {% if inconsistencias.estado == "nunca_verificado" %}Verificar inconsistências{% else %}Verificar de novo{% endif %}
+  </button>
+</section>
+
+<div class="aviso-salvamento" id="aviso-salvamento" role="alert" hidden>
+  Não foi possível salvar, tente de novo.
+</div>
+
+{% if grupos or requisitos_por_categoria %}
+<div class="acoes-recolher">
+  <button type="button" class="btn btn-ghost btn-expandir-tudo">Expandir tudo</button>
+  <button type="button" class="btn btn-ghost btn-recolher-tudo">Recolher tudo</button>
+</div>
+{% endif %}
+
+{% if grupos %}
+  {% for grupo in grupos %}
+  <details class="categoria categoria-recolhivel" open>
+    <summary class="categoria-cabecalho">
+      <h2>{{ grupo.rotulo }}</h2>
+      <span class="contador-categoria mono">{{ grupo.feitas }} de {{ grupo.total }} conferidas</span>
+    </summary>
+    <div class="lista-exigencias">
+      {% for grupo_hipoteses in grupo.grupos %}
+      <article class="card-exigencia card-grupo-hipoteses{% if grupo_hipoteses.todas_ok %} card-exigencia--conferida{% endif %}"
+               data-exigencia-ids="{{ grupo_hipoteses.exigencia_ids|join(',') }}">
+        <div class="card-exigencia-topo">
+          <input type="checkbox" id="check-grupo-{{ grupo_hipoteses.exigencia_ids[0] }}" class="checkbox-exigencia"
+                 {% if grupo_hipoteses.todas_ok %}checked{% endif %}>
+          <label for="check-grupo-{{ grupo_hipoteses.exigencia_ids[0] }}" class="card-exigencia-descricao">{{ grupo_hipoteses.titulo }}</label>
+        </div>
+
+        <p class="nota-discreta">Apresente a hipótese aplicável ao seu tipo societário. Atenção: leia cada trecho por completo — algumas hipóteses exigem documentação complementar indicada no próprio texto (ex: "acompanhado de...").</p>
+
+        {% for hipotese in grupo_hipoteses.hipoteses %}
+        <div class="requisito-item-achado">
+          <span class="eyebrow">{{ hipotese.descricao }}</span>
+          <div class="card-exigencia-selos">
+            {% if hipotese.confianca == "localizado" %}
+            <span class="selo selo-localizado">✓ localizado</span>
+            {% else %}
+            <span class="selo selo-inferido">⚠ inferido — confira</span>
+            {% endif %}
+          </div>
+          {% if hipotese.base_legal %}
+          <p class="base-legal mono">{{ hipotese.base_legal }}</p>
+          {% endif %}
+          {% if hipotese.trecho %}
+          <blockquote class="trecho">
+            <p>{{ hipotese.trecho }}</p>
+            {% if hipotese.localizador %}
+            <cite>{{ hipotese.localizador }}{% if hipotese.nome_arquivo_origem %} · {{ hipotese.nome_arquivo_origem }}{% endif %}</cite>
+            {% endif %}
+          </blockquote>
+          {% endif %}
+        </div>
+        {% endfor %}
+
+        <label class="campo-observacao">
+          Observação
+          <textarea class="observacao-texto" rows="2" placeholder="Anotações sobre esta exigência...">{{ grupo_hipoteses.hipoteses[0].observacao_usuario or "" }}</textarea>
+        </label>
+        <button type="button" class="btn btn-ghost btn-salvar-nota">Salvar nota</button>
+      </article>
+      {% endfor %}
+
+      {% for exigencia in grupo.exigencias %}
+      <article class="card-exigencia{% if exigencia.status_check == "ok" %} card-exigencia--conferida{% endif %}" data-exigencia-ids="{{ exigencia.id }}">
+        <div class="card-exigencia-topo">
+          <input type="checkbox" id="check-{{ exigencia.id }}" class="checkbox-exigencia"
+                 {% if exigencia.status_check == "ok" %}checked{% endif %}>
+          <label for="check-{{ exigencia.id }}" class="card-exigencia-descricao">{{ exigencia.descricao }}</label>
+        </div>
+
+        <div class="card-exigencia-selos">
+          {% if exigencia.confianca == "localizado" %}
+          <span class="selo selo-localizado">✓ localizado</span>
+          {% else %}
+          <span class="selo selo-inferido">⚠ inferido — confira</span>
+          {% endif %}
+          {% if exigencia.obrigatorio_para == "vencedor" %}
+          <span class="tag-vencedor">só do vencedor</span>
+          {% endif %}
+        </div>
+
+        {% if exigencia.base_legal %}
+        <p class="base-legal mono">{{ exigencia.base_legal }}</p>
+        {% endif %}
+
+        {% if exigencia.trecho %}
+        <blockquote class="trecho">
+          <p>{{ exigencia.trecho }}</p>
+          {% if exigencia.localizador %}
+          <cite>{{ exigencia.localizador }}{% if exigencia.nome_arquivo_origem %} · {{ exigencia.nome_arquivo_origem }}{% endif %}</cite>
+          {% endif %}
+        </blockquote>
+        {% endif %}
+
+        {% if exigencia.cruzou_pagina %}
+        <p class="nota-discreta">Este trecho atravessa duas páginas — a numeração é aproximada.</p>
+        {% endif %}
+
+        {% if exigencia.ocorrencias_encontradas and exigencia.ocorrencias_encontradas > 1 %}
+        <p class="nota-discreta">Este trecho aparece em mais de um lugar do documento, confira a página certa.</p>
+        {% endif %}
+
+        <label class="campo-observacao">
+          Observação
+          <textarea class="observacao-texto" rows="2" placeholder="Anotações sobre esta exigência...">{{ exigencia.observacao_usuario or "" }}</textarea>
+        </label>
+        <button type="button" class="btn btn-ghost btn-salvar-nota">Salvar nota</button>
+      </article>
+      {% endfor %}
+    </div>
+  </details>
+  {% endfor %}
+{% else %}
+<div class="estado-vazio">
+  <span class="eyebrow">Sem exigências</span>
+  <h2>Nenhuma exigência encontrada</h2>
+  <p class="lead" style="margin:0 auto;">A análise não encontrou nenhuma exigência de habilitação neste processo.</p>
+</div>
+{% endif %}
+
+{% if requisitos_por_categoria %}
+<section class="categoria categoria-requisitos-item">
+  <h2>Requisitos Específicos por Item</h2>
+  <p class="lead" style="margin-bottom:20px;">Extraído direto do texto do edital, por palavra-chave — não passa pela IA nem pelo validador, então não tem checkbox: é sempre literal. Agrupado por categoria: quando o mesmo texto vale para vários itens, aparece uma vez só, com a lista de itens correspondente.</p>
+  <div class="lista-exigencias">
+    {% for bloco_categoria in requisitos_por_categoria %}
+    <details class="card-exigencia card-requisito-categoria categoria-recolhivel"
+              {% if requisitos_item_aberto_por_padrao %}open{% endif %}>
+      <summary class="card-exigencia-topo">
+        <span class="card-exigencia-descricao">{{ bloco_categoria.rotulo }}</span>
+        <span class="card-exigencia-selos">
+          <span class="selo selo-localizado">✓ verificado no texto do edital</span>
+          <span class="contador-categoria mono">{{ bloco_categoria.total_itens }} {{ "item" if bloco_categoria.total_itens == 1 else "itens" }}</span>
+        </span>
+      </summary>
+      {% for grupo_trecho in bloco_categoria.grupos_trecho %}
+      <div class="requisito-item-achado">
+        <span class="eyebrow mono">
+          {% if grupo_trecho.itens|length == 1 %}
+          Item {{ grupo_trecho.itens[0] }}
+          {% else %}
+          Itens: {{ grupo_trecho.itens|join(', ') }}
+          {% endif %}
+        </span>
+        <blockquote class="trecho">
+          <p>{{ grupo_trecho.trecho }}</p>
+          {% if grupo_trecho.localizador %}
+          <cite>{{ grupo_trecho.localizador }}</cite>
+          {% endif %}
+        </blockquote>
+      </div>
+      {% endfor %}
+    </details>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<script src="{{ url_for('static', path='/js/checklist.js') }}"></script>
+<script src="{{ url_for('static', path='/js/perguntas.js') }}"></script>
+<script src="{{ url_for('static', path='/js/inconsistencias.js') }}"></script>
+
+{% endblock %}

@@ -1,0 +1,662 @@
+/* Identidade visual NexLicit — tokens e reset reaproveitados de
+   nexlicit-landing.html (arquivo de referência do projeto) de propósito,
+   pra manter as telas do Engine visualmente consistentes com o site
+   institucional. Nada de reinterpretar cor ou fonte aqui. */
+
+:root{
+  --ink:#12233D;
+  --ink-soft:#2C4468;
+  --paper:#F1ECE0;
+  --paper-deep:#E4DCC8;
+  --card:#FBF9F3;
+  --brass:#A2782A;
+  --stamp:#8B2E2E;
+  --line: rgba(18,35,61,0.14);
+  --line-strong: rgba(18,35,61,0.28);
+  --shadow: 0 18px 40px -22px rgba(18,35,61,0.35);
+}
+
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:'IBM Plex Sans', sans-serif;
+  font-size:16px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--brass); color:var(--paper);}
+a{color:inherit; text-decoration:none;}
+ul{list-style:none;}
+img,svg{display:block; max-width:100%;}
+
+.mono{font-family:'IBM Plex Mono', monospace;}
+.eyebrow{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:0.72rem;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--brass);
+  font-weight:500;
+  display:block;
+}
+
+h1,h2,h3{
+  font-family:'Newsreader', serif;
+  font-weight:600;
+  line-height:1.15;
+  letter-spacing:-0.01em;
+}
+h1{font-size:clamp(1.7rem, 3vw, 2.3rem); margin:10px 0 12px;}
+h2{font-size:1.3rem;}
+p.lead{color:var(--ink-soft); max-width:60ch;}
+
+.wrap{
+  max-width:900px;
+  margin:0 auto;
+  padding:0 24px;
+}
+
+/* ---------- Foco de teclado (vale pra qualquer elemento interativo) ---------- */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible{
+  outline:2px solid var(--brass);
+  outline-offset:2px;
+}
+
+/* ---------- Botões ---------- */
+.btn{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:12px 22px;
+  border-radius:3px;
+  font-family:'IBM Plex Sans', sans-serif;
+  font-weight:600;
+  font-size:0.92rem;
+  cursor:pointer;
+  border:1px solid transparent;
+  transition:transform .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.btn-primary{background:var(--ink); color:var(--paper);}
+.btn-primary:hover{transform:translateY(-2px); box-shadow:var(--shadow);}
+.btn-primary:active{transform:translateY(0); opacity:0.85;}
+.btn-ghost{background:transparent; color:var(--ink); border-color:var(--line-strong);}
+.btn-ghost:hover{background:var(--paper-deep);}
+.btn-ghost:active{background:var(--line-strong);}
+
+/* ---------- Cabeçalho da marca ---------- */
+header{
+  position:sticky; top:0; z-index:50;
+  background:rgba(241,236,224,0.92);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+header nav{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:16px;
+  padding:16px 0;
+  flex-wrap:wrap;
+}
+.logo{display:flex; align-items:center; gap:11px;}
+.logo-mark{flex-shrink:0;}
+.logo-text{display:flex; flex-direction:column; line-height:1;}
+.logo-word{
+  font-family:'Newsreader', serif;
+  font-weight:700;
+  font-size:1.3rem;
+  letter-spacing:-0.02em;
+  color:var(--ink);
+}
+.logo-tag{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:0.58rem;
+  letter-spacing:0.12em;
+  color:var(--ink-soft);
+  margin-top:3px;
+}
+@media (max-width:560px){
+  .logo-tag{display:none;}
+}
+
+main.wrap{padding:36px 24px 80px;}
+
+/* ---------- Formulários (novo processo) ---------- */
+.formulario{
+  max-width:640px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  margin-top:28px;
+}
+.formulario label{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  font-size:0.85rem;
+  font-weight:500;
+  color:var(--ink-soft);
+}
+.formulario input[type="text"],
+.formulario input[type="number"],
+.formulario input[type="date"],
+.formulario input[type="file"]{
+  font-family:'IBM Plex Sans', sans-serif;
+  font-size:16px; /* 16px+ evita zoom automático no iOS ao focar */
+  padding:12px 14px;
+  border:1px solid var(--line-strong);
+  border-radius:4px;
+  background:var(--card);
+  color:var(--ink);
+}
+.formulario button{align-self:flex-start; margin-top:8px;}
+.form-row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+}
+@media (max-width:600px){
+  .form-row{grid-template-columns:1fr;}
+  .formulario button{align-self:stretch; justify-content:center;}
+}
+
+/* ---------- Lista de processos ---------- */
+.cabecalho-lista{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:16px; flex-wrap:wrap;
+  margin-bottom:28px;
+}
+.lista-processos{display:flex; flex-direction:column; gap:14px;}
+.card-processo{
+  display:block;
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:18px 22px;
+  transition:box-shadow .2s ease, transform .2s ease;
+}
+.card-processo:hover{box-shadow:var(--shadow); transform:translateY(-2px);}
+.card-processo-cabecalho{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:12px; flex-wrap:wrap;
+}
+.card-processo-cabecalho h2{font-size:1.08rem;}
+.progresso-tag{
+  font-size:0.74rem;
+  padding:4px 10px;
+  border-radius:20px;
+  border:1px solid var(--line-strong);
+  color:var(--ink-soft);
+  flex-shrink:0;
+}
+.card-processo-meta{margin-top:6px; font-size:0.78rem; color:var(--ink-soft);}
+
+.estado-vazio{
+  max-width:480px;
+  margin:56px auto;
+  text-align:center;
+  padding:48px 32px;
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:8px;
+}
+.estado-vazio h2{margin:12px 0 14px; font-size:1.4rem;}
+
+/* ---------- Tela de espera (analisando) ---------- */
+.espera, .espera-erro{
+  max-width:520px;
+  margin:64px auto;
+  text-align:center;
+}
+.espera .spinner{
+  width:34px; height:34px;
+  margin:28px auto 0;
+  border-radius:50%;
+  border:3px solid var(--line-strong);
+  border-top-color:var(--brass);
+  animation:girar 0.9s linear infinite;
+}
+@keyframes girar{ to { transform:rotate(360deg); } }
+
+/* ---------- Cabeçalho do processo / checklist ---------- */
+.cabecalho-processo{margin-bottom:28px;}
+.dados-processo{
+  display:flex; flex-wrap:wrap; gap:6px 26px;
+  margin-top:16px;
+}
+.dados-processo > div{display:flex; gap:6px; font-size:0.82rem;}
+.dados-processo dt{color:var(--ink-soft);}
+.dados-processo dd{color:var(--ink);}
+
+.barra-progresso-wrap{
+  margin-top:22px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.barra-progresso{
+  height:8px;
+  border-radius:4px;
+  background:var(--paper-deep);
+  overflow:hidden;
+}
+.barra-progresso-preenchida{
+  height:100%;
+  background:var(--brass);
+  transition:width .3s ease;
+}
+.barra-progresso-texto{font-size:0.78rem; color:var(--ink-soft);}
+
+.aviso-salvamento{
+  position:sticky;
+  top:74px;
+  z-index:40;
+  background:var(--stamp);
+  color:var(--paper);
+  padding:12px 18px;
+  border-radius:6px;
+  font-size:0.88rem;
+  margin-bottom:20px;
+}
+
+/* ---------- Categorias e cards de exigência ---------- */
+.categoria{margin-top:40px;}
+.categoria h2{
+  border-bottom:1px solid var(--line);
+  padding-bottom:12px;
+  margin-bottom:20px;
+}
+.lista-exigencias{display:flex; flex-direction:column; gap:16px;}
+
+/* ---------- Cabeçalhos recolhíveis (Passo 9/Mudança 5) ----------
+   <details>/<summary> nativo por baixo — sem JS pra abrir/fechar cada
+   bloco, só pro botão "expandir/recolher tudo" que precisa mexer em vários
+   de uma vez (isso o HTML sozinho não faz). O visual esconde a seta padrão
+   do navegador e desenha uma seta própria (▾) que gira quando fecha. */
+.acoes-recolher{
+  display:flex;
+  gap:10px;
+  margin-top:28px;
+}
+
+summary{list-style:none; cursor:pointer;}
+summary::-webkit-details-marker{display:none;} /* Chrome/Edge/Safari */
+
+.categoria-cabecalho{
+  display:flex;
+  align-items:center;
+  gap:16px;
+  flex-wrap:wrap;
+  border-bottom:1px solid var(--line);
+  padding-bottom:12px;
+  margin-bottom:20px;
+}
+/* h2 já tem borda/espaçamento próprios (regra acima, ainda vale pro <h2>
+   sozinho da seção "Requisitos Específicos por Item", que não é recolhível)
+   — dentro do cabeçalho recolhível quem desenha a borda é o .categoria-
+   cabecalho inteiro (h2 + contador juntos), não o h2 sozinho. margin-right:
+   auto no h2 empurra contador+seta pra direita, coladinhos entre si (com
+   justify-content:space-between os três ficariam espaçados igual, e o gap
+   entre contador e seta fica grande e esquisito). */
+.categoria-cabecalho h2{border-bottom:none; padding-bottom:0; margin-bottom:0; margin-right:auto;}
+
+.categoria-cabecalho::after,
+summary.card-exigencia-topo::after{
+  content:"▾";
+  font-size:0.85rem;
+  color:var(--brass);
+  transition:transform .2s ease;
+  flex-shrink:0;
+}
+details:not([open]) > .categoria-cabecalho::after,
+details:not([open]) > summary.card-exigencia-topo::after{
+  transform:rotate(-90deg);
+}
+
+summary.card-exigencia-topo .card-exigencia-descricao{margin-right:auto;}
+
+.contador-categoria{
+  font-size:0.76rem;
+  color:var(--ink-soft);
+  white-space:nowrap;
+}
+
+.categoria-cabecalho:hover h2,
+summary.card-exigencia-topo:hover .card-exigencia-descricao{
+  color:var(--brass);
+}
+
+.card-exigencia{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:20px 22px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  transition:background-color .2s ease, border-color .2s ease;
+}
+/* Passo 9 (Mudança 2): feedback visual de "já conferido" — reaproveita
+   --paper-deep (já usado na barra de progresso e no papel institucional) e
+   --brass (já usado nos selos e nos destaques da marca), de propósito: a
+   paleta não tem verde nenhum, então em vez de inventar uma cor nova só pra
+   isso, usa o que já existe. Aplicado no card inteiro (não só no
+   checkbox) pra dar pra ver "isso já tá resolvido" batendo o olho, sem
+   precisar procurar o quadradinho marcado em meio ao texto. */
+.card-exigencia--conferida{
+  background:var(--paper-deep);
+  border-color:var(--brass);
+}
+/* .trecho normalmente já usa --paper-deep de propósito (contraste com o
+   --card do card em volta) — dentro de um card conferido os dois ficariam
+   com o mesmo tom e o trecho perderia a "caixinha". Troca pro tom do card
+   original (mais claro), inversão que mantém o contraste sem cor nova. */
+.card-exigencia--conferida .trecho{
+  background:var(--card);
+}
+.card-exigencia-topo{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+}
+.checkbox-exigencia{
+  width:20px; height:20px;
+  flex-shrink:0;
+  margin-top:2px;
+  accent-color:var(--brass);
+}
+.card-exigencia-descricao{
+  font-weight:600;
+  font-size:1rem;
+  cursor:pointer;
+}
+.card-exigencia-selos{display:flex; flex-wrap:wrap; gap:8px;}
+
+.selo{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  font-family:'IBM Plex Mono', monospace;
+  font-size:0.74rem;
+  font-weight:500;
+  padding:4px 10px;
+  border-radius:20px;
+  letter-spacing:0.02em;
+  transition:background-color .2s ease;
+}
+.selo-localizado{
+  background:rgba(162,120,42,0.14);
+  color:var(--brass);
+  border:1px solid rgba(162,120,42,0.4);
+}
+.selo-inferido{
+  background:rgba(139,46,46,0.12);
+  color:var(--stamp);
+  border:1px solid rgba(139,46,46,0.4);
+}
+.tag-vencedor{
+  display:inline-flex; align-items:center;
+  font-family:'IBM Plex Mono', monospace;
+  font-size:0.72rem;
+  padding:4px 10px;
+  border-radius:20px;
+  border:1px solid var(--line-strong);
+  color:var(--ink-soft);
+}
+
+.base-legal{font-size:0.8rem; color:var(--ink-soft);}
+
+.trecho{
+  background:var(--paper-deep);
+  border-left:3px solid var(--brass);
+  padding:12px 16px;
+  border-radius:4px;
+  font-size:0.9rem;
+  color:var(--ink-soft);
+}
+.trecho cite{
+  display:block;
+  margin-top:8px;
+  font-style:normal;
+  font-family:'IBM Plex Mono', monospace;
+  font-size:0.72rem;
+  color:var(--ink-soft);
+  opacity:0.85;
+}
+
+.nota-discreta{
+  font-size:0.8rem;
+  color:var(--ink-soft);
+  font-style:italic;
+}
+
+.campo-observacao{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  font-size:0.82rem;
+  font-weight:500;
+  color:var(--ink-soft);
+}
+.observacao-texto{
+  font-family:'IBM Plex Sans', sans-serif;
+  font-size:0.92rem;
+  padding:10px 12px;
+  border:1px solid var(--line-strong);
+  border-radius:4px;
+  background:var(--paper);
+  color:var(--ink);
+  resize:vertical;
+}
+.card-exigencia .btn-ghost{align-self:flex-start; padding:8px 16px; font-size:0.82rem;}
+
+/* Requisitos por item (Passo 8): vários achados dentro do mesmo card,
+   separados visualmente sem virar um card por achado. */
+.requisito-item-achado + .requisito-item-achado{
+  margin-top:14px;
+  padding-top:14px;
+  border-top:1px dashed var(--line);
+}
+
+/* ---------- Perguntas sobre o edital (Fase 2, Camada 2) ----------
+   Seção em caixa (fundo --card, borda --line), igual ao tratamento visual
+   já usado em .estado-vazio/.card-processo — separa visualmente "isto é
+   uma ferramenta" das categorias de checklist logo abaixo. */
+.secao-perguntas{
+  margin-bottom:36px;
+  padding:24px;
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:8px;
+}
+.secao-perguntas h2{margin:4px 0 10px;}
+
+.form-pergunta{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:16px;
+}
+.form-pergunta input[type="text"]{
+  flex:1;
+  min-width:220px;
+  font-family:'IBM Plex Sans', sans-serif;
+  font-size:16px; /* 16px+ evita zoom automático no iOS ao focar, mesmo motivo do .formulario */
+  padding:12px 14px;
+  border:1px solid var(--line-strong);
+  border-radius:4px;
+  background:var(--paper);
+  color:var(--ink);
+}
+
+.pergunta-carregando{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-top:16px;
+  font-size:0.85rem;
+  color:var(--ink-soft);
+}
+/* Sem isso, o atributo "hidden" (que perguntas.js liga/desliga via JS) não
+   escondia o elemento: regra de autor (esta, com display:flex) sempre
+   vence a folha de estilo do navegador ([hidden]{display:none}), não
+   importa especificidade nem ordem — são origens diferentes na cascata.
+   Encontrado no teste visual real (Camada 2): o "Buscando resposta..."
+   continuava na tela por baixo da resposta já carregada. */
+.pergunta-carregando[hidden]{display:none;}
+/* Variante pequena do .spinner da tela de espera (analisando.html) — o
+   spinner original (34px) foi pensado pra ocupar uma tela inteira sozinho;
+   aqui ele fica ao lado de uma frase, dentro de uma seção que já tem
+   bastante conteúdo em volta. Mantém a mesma cor/animação (herdadas de
+   .spinner), só o tamanho muda. */
+.spinner.spinner-pequeno{
+  width:18px; height:18px;
+  margin:0;
+  border-width:2px;
+}
+
+/* Erro de verdade (rede, 500, 502...) reaproveita a MESMA linguagem visual
+   do aviso-salvamento (banner sólido --stamp) já usado pra falha ao gravar
+   checkbox/nota — sinaliza "algo quebrou no sistema", diferente de uma
+   resposta negativa válida do produto (.resposta-nao-encontrada, abaixo).
+   position:static sobrescreve o sticky do original: aquele fica preso no
+   topo da página inteira; este vive dentro da seção de perguntas. */
+.aviso-salvamento--inline{
+  position:static;
+  margin-top:16px;
+}
+
+.lista-pergunta-resposta{
+  display:flex;
+  flex-direction:column;
+  gap:20px;
+  margin-top:20px;
+}
+.lista-pergunta-resposta:empty{margin-top:0;}
+
+.card-pergunta-resposta{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.pergunta-feita{font-weight:600; font-size:0.95rem;}
+
+/* Resposta "não encontrada" — mesmo formato de caixa do .trecho (borda à
+   esquerda + fundo levemente colorido), mas com --stamp em vez de --brass:
+   é uma resposta negativa válida do produto, não uma citação encontrada,
+   então não pode ficar visualmente igual a uma. Opacidades (0.12 fundo /
+   0.4 borda) repetem exatamente o par já usado em .selo-inferido, pra não
+   inventar uma nova intensidade de vermelho. */
+.resposta-nao-encontrada{
+  background:rgba(139,46,46,0.12);
+  border:1px solid rgba(139,46,46,0.4);
+  border-left:3px solid var(--stamp);
+  padding:12px 16px;
+  border-radius:4px;
+  font-size:0.9rem;
+  color:var(--ink-soft);
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.eyebrow-stamp{color:var(--stamp);}
+
+/* Contexto grande demais (413) — limitação conhecida da versão atual, não
+   erro nem ausência de resposta: tom neutro (mesmos tons já usados em
+   .barra-progresso/.formulario, sem --brass nem --stamp), pra não parecer
+   nem "achei" nem "não achei". */
+.aviso-limitacao{
+  background:var(--paper-deep);
+  border:1px solid var(--line-strong);
+  border-radius:4px;
+  padding:12px 16px;
+  font-size:0.9rem;
+  color:var(--ink-soft);
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+/* ---------- Motor de inconsistências edital-vs-TR (Fase 2, Camada 2) ----------
+   .secao-inconsistencias reaproveita .secao-perguntas pra caixa em volta
+   (ver checklist.html) — as regras aqui são só o que é específico dela. */
+.estado-inconsistencias-neutro{
+  margin-top:16px;
+  color:var(--ink-soft);
+  font-size:0.9rem;
+}
+
+/* Estado positivo ("nenhuma inconsistência") — mesmo par de opacidades já
+   usado em .selo-localizado (0.10 fundo / 0.35 borda, brass), pra não
+   inventar uma nova intensidade de cor só pra isso. É uma resposta boa,
+   mas não pode competir visualmente com --brass usado nos achados de
+   .trecho — por isso a opacidade fica mais discreta que a de um selo. */
+.estado-inconsistencias-ok{
+  margin-top:16px;
+  background:rgba(162,120,42,0.10);
+  border:1px solid rgba(162,120,42,0.35);
+  border-radius:6px;
+  padding:16px 18px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.estado-inconsistencias-ok p{font-size:0.9rem; color:var(--ink-soft);}
+
+.lista-inconsistencias{
+  display:flex;
+  flex-direction:column;
+  gap:28px;
+  margin-top:20px;
+}
+.categoria-inconsistencia h3{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  font-size:1.05rem;
+  border-bottom:1px solid var(--line);
+  padding-bottom:10px;
+  margin-bottom:14px;
+}
+.categoria-inconsistencia .lista-exigencias,
+.categoria-inconsistencia{display:flex; flex-direction:column;}
+.categoria-inconsistencia .card-inconsistencia + .card-inconsistencia{margin-top:16px;}
+
+/* .card-inconsistencia reaproveita .card-exigencia pro visual do card (ver
+   checklist.html) — aqui só o layout dos dois trechos lado a lado. */
+.par-trechos{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+  margin-top:4px;
+}
+.trecho-lado .eyebrow{margin-bottom:6px;}
+
+#btn-verificar-inconsistencias{margin-top:20px;}
+
+@media (max-width:560px){
+  .card-exigencia{padding:16px 18px;}
+  .acoes-recolher{flex-direction:column;}
+  .acoes-recolher .btn{justify-content:center;}
+  .form-pergunta{flex-direction:column;}
+  .form-pergunta button{justify-content:center;}
+  .par-trechos{grid-template-columns:1fr;}
+}
+
+footer{
+  border-top:1px solid var(--line);
+  padding:24px 0;
+  margin-top:60px;
+}
+footer .wrap{
+  font-size:0.8rem;
+  color:var(--ink-soft);
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation:none !important; transition:none !important;}
+}

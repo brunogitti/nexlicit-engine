@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block titulo %}Novo processo — NexLicit Engine{% endblock %}
+{% block conteudo %}
+
+<span class="eyebrow">Novo processo</span>
+<h1>Enviar edital para análise</h1>
+<p class="lead">Preencha o que souber sobre o processo e envie os arquivos do edital (PDF ou DOCX). A análise começa assim que você enviar — pode levar alguns minutos.</p>
+
+<form class="formulario" method="post" action="/processos/novo" enctype="multipart/form-data">
+  <label>Nome do processo *
+    <input type="text" name="nome" required autofocus>
+  </label>
+
+  <div class="form-row">
+    <label>Órgão
+      <input type="text" name="orgao">
+    </label>
+    <label>Modalidade
+      <input type="text" name="modalidade">
+    </label>
+  </div>
+
+  <label>Objeto
+    <input type="text" name="objeto">
+  </label>
+
+  <div class="form-row">
+    <label>Valor estimado (R$)
+      <input type="number" step="0.01" min="0" name="valor_estimado">
+    </label>
+    <label>Data da sessão
+      <input type="date" name="data_sessao">
+    </label>
+  </div>
+
+  <label>Plataforma
+    <input type="text" name="plataforma" placeholder="ex.: PNCP, BLL, Licitanet...">
+  </label>
+
+  <label>Arquivos do edital (PDF ou DOCX) *
+    <input type="file" name="arquivos" multiple required accept=".pdf,.docx">
+  </label>
+
+  <button type="submit" class="btn btn-primary">Criar e analisar</button>
+</form>
+
+{% endblock %}

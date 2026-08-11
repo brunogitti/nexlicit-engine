@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block titulo %}Analisando processo — NexLicit Engine{% endblock %}
+{% block conteudo %}
+
+<div class="espera" id="tela-espera">
+  <span class="eyebrow">Processando</span>
+  <h1>Analisando seu processo</h1>
+  <p class="lead" style="margin:0 auto;">Isso pode levar alguns minutos — a IA está lendo o edital inteiro e o validador está conferindo cada trecho encontrado contra o documento original. Não feche esta aba.</p>
+  <div class="spinner" role="status" aria-live="polite" aria-label="Analisando"></div>
+</div>
+
+<div class="espera-erro" id="tela-erro" hidden>
+  <span class="eyebrow" style="color:var(--stamp);">Não foi possível concluir</span>
+  <h1>A análise falhou</h1>
+  <p class="lead" id="texto-erro" style="margin:0 auto 24px;"></p>
+  <a class="btn btn-primary" id="link-tentar-de-novo" href="#">Tentar de novo</a>
+</div>
+
+<script>
+(function () {
+  const processoId = {{ processo_id }};
+  const params = new URLSearchParams(window.location.search);
+  const forcar = params.get('forcar') === 'true';
+  const url = '/processos/' + processoId + '/analisar' + (forcar ? '?forcar=true' : '');
+
+  fetch(url, { method: 'POST' })
+    .then(async function (resposta) {
+      if (resposta.status === 409) {
+        // Já tinha sido analisado antes (ex.: usuário recarregou a página
+        // depois de terminar) — trata como sucesso, não como erro.
+        window.location = '/processos/' + processoId + '/checklist';
+        return;
+      }
+      if (!resposta.ok) {
+        let corpo = {};
+        try { corpo = await resposta.json(); } catch (e) { /* corpo sem JSON */ }
+        throw new Error(corpo.detail || ('Falha inesperada (HTTP ' + resposta.status + ').'));
+      }
+      window.location = '/processos/' + processoId + '/checklist';
+    })
+    .catch(function (erro) {
+      document.getElementById('tela-espera').hidden = true;
+      const telaErro = document.getElementById('tela-erro');
+      telaErro.hidden = false;
+      document.getElementById('texto-erro').textContent = erro.message;
+      document.getElementById('link-tentar-de-novo').href =
+        '/processos/' + processoId + '/analisando?forcar=true';
+    });
+})();
+</script>
+
+{% endblock %}

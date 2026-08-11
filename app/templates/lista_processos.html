@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block titulo %}Processos — NexLicit Engine{% endblock %}
+{% block conteudo %}
+
+<div class="cabecalho-lista">
+  <h1 style="margin:0;">Processos</h1>
+  <a class="btn btn-primary" href="/processos/novo">+ Novo processo</a>
+</div>
+
+{% if processos %}
+<div class="lista-processos">
+  {% for p in processos %}
+  <a class="card-processo" href="/processos/{{ p.id }}/checklist">
+    <div class="card-processo-cabecalho">
+      <h2>{{ p.nome }}</h2>
+      {% if p.total_exigencias %}
+      <span class="progresso-tag mono">{{ p.exigencias_feitas }} de {{ p.total_exigencias }} conferidas</span>
+      {% endif %}
+    </div>
+    <p class="card-processo-meta mono">
+      {%- if p.orgao %}{{ p.orgao }}{% endif -%}
+      {%- if p.modalidade %} · {{ p.modalidade }}{% endif -%}
+      {%- if p.data_sessao %} · {{ p.data_sessao }}{% endif -%}
+      {%- if not p.orgao and not p.modalidade and not p.data_sessao %}sem dados adicionais{% endif -%}
+    </p>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="estado-vazio">
+  <span class="eyebrow">Nenhum processo ainda</span>
+  <h2>Nenhum processo analisado ainda</h2>
+  <p class="lead" style="margin:0 auto 22px;">Comece enviando um edital para a NexLicit Engine montar o checklist de habilitação para você.</p>
+  <a class="btn btn-primary" href="/processos/novo">Analisar meu primeiro edital</a>
+</div>
+{% endif %}
+
+{% endblock %}
