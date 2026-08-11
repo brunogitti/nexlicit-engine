@@ -6,6 +6,17 @@ jinja2
 python-multipart
 python-dotenv
 google-genai
+pyyaml  # lê app/extracao/palavras_chave_item.yaml (extrator de exigências por item, Passo 8)
 
-# dependência de desenvolvimento (rodar os testes)
+# dependências de desenvolvimento (rodar os testes)
 pytest
+httpx2  # só usado pelo TestClient nos testes (tests/test_rotas.py); não é
+        # necessário para rodar o app em produção (httpx puro está deprecated
+        # para esse uso, por isso o "2")
+playwright  # só usado nos testes de ponta a ponta da seção de perguntas
+            # (tests/test_perguntas_ui.py, Fase 2/Camada 2) — TestClient não
+            # executa JavaScript, e é o JS de app/static/js/perguntas.js que
+            # monta o card de resposta na tela. Usa o Edge já instalado no
+            # sistema (channel="msedge"), não baixa Chromium à parte — depois
+            # de instalar o pacote, rodar uma vez:
+            #   python -m playwright install msedge

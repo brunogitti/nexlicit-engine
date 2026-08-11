@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from app.extracao.extrator import Bloco, DocumentoExtraido
+from app.ia.llm_client import _parsear_resposta
 from app.validacao.validador import validar_exigencias
 
 CAMINHO_FIXTURE_OURO = (
@@ -72,7 +73,13 @@ def test_teste_de_ouro_camara_lins_todas_localizadas():
         alertas=[],
     )
 
-    resultado = validar_exigencias(dados["exigencias_extraidas"], [documento])
+    # A fixture guarda o JSON aninhado por categoria exatamente como saiu do
+    # Gemini (Passo 3) — achata com a função real (_parsear_resposta), não
+    # com um resultado já achatado à mão, pra exercitar o pipeline inteiro.
+    resposta_bruta = json.dumps(dados["resposta_ia_bruta_por_categoria"])
+    exigencias_extraidas = _parsear_resposta(resposta_bruta)
+
+    resultado = validar_exigencias(exigencias_extraidas, [documento])
 
     assert len(resultado) == 5
     for exigencia in resultado:
