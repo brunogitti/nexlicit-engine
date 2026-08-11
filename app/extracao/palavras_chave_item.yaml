@@ -1,0 +1,35 @@
+# Palavras-chave para o extrator determinístico de exigências técnicas por
+# item (Passo 8, extração sem IA). Editável sem mexer em código — mesmo
+# padrão do keywords.yaml do Radar NexLicit.
+#
+# Cada categoria é uma lista de termos. A busca ignora acento e
+# maiúscula/minúscula (ver app/extracao/tabela_itens.py), então não precisa
+# repetir a mesma palavra com e sem acento — "CATALOGO" e "CATÁLOGO" abaixo
+# já batem a mesma coisa depois da normalização; deixei os dois porque foi
+# assim que você especificou, mas avise se quiser que eu remova a
+# duplicata.
+
+amostra:
+  - "APRESENTAR AMOSTRA"
+registro_sanitario:
+  - "ANVISA"
+  - "REGISTRO NO MS"
+  - "MINISTERIO DA SAUDE"
+metrologia:
+  - "INMETRO"
+normas_tecnicas:
+  - "ABNT"
+laudo:
+  - "LAUDO TECNICO"
+  - "LAUDO"
+documentacao_produto:
+  - "MANUAL"
+  - "CATALOGO"
+  - "CATÁLOGO"
+garantia:
+  - "GARANTIA"
+certificacao:
+  - "CERTIFICADO DE BOAS PRATICAS"
+  - "CERTIFICADO"
+assistencia_tecnica:
+  - "ASSISTENCIA TECNICA"
