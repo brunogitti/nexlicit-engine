@@ -39,3 +39,14 @@ USAR_BANCO_REAL = os.getenv("NEXLICIT_USE_BANCO_REAL") == "1"
 
 # Pasta onde os arquivos enviados (editais, TR, anexos) são salvos.
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./uploads")
+
+# Modo estático do demo público (Fase 3): quando "1", toda rota de escrita
+# (criar processo, analisar, perguntar, detectar inconsistências) fica
+# bloqueada — ver app/demo_estatico.py. O demo público mostra só o
+# resultado já processado do edital fictício fixo (demo/edital_ficticio/),
+# sem disparar chamada de IA nem aceitar upload de visitante: protege a
+# cota diária compartilhada do Gemini (20 chamadas/dia) de qualquer
+# visitante ou bot, e evita acumular processo vazio/arquivo de terceiro no
+# servidor público. O servidor de desenvolvimento não define isso, então
+# continua com todas as rotas liberadas por padrão.
+DEMO_ESTATICO = os.getenv("NEXLICIT_DEMO_ESTATICO") == "1"

@@ -7,6 +7,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.demo_estatico import bloquear_se_demo_estatico
 from app.pipeline import responder_pergunta_processo
 
 router = APIRouter()
@@ -18,4 +19,5 @@ class PerguntaBody(BaseModel):
 
 @router.post("/processos/{id}/perguntar")
 def perguntar_rota(id: int, body: PerguntaBody) -> dict:
+    bloquear_se_demo_estatico()
     return responder_pergunta_processo(id, body.pergunta)

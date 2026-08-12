@@ -10,6 +10,7 @@
 
 from fastapi import APIRouter
 
+from app.demo_estatico import bloquear_se_demo_estatico
 from app.pipeline import detectar_inconsistencias_processo
 
 router = APIRouter()
@@ -17,4 +18,5 @@ router = APIRouter()
 
 @router.post("/processos/{id}/detectar-inconsistencias")
 def detectar_inconsistencias_rota(id: int) -> dict:
+    bloquear_se_demo_estatico()
     return detectar_inconsistencias_processo(id)

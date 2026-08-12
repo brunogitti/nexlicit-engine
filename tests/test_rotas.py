@@ -431,3 +431,65 @@ def test_detectar_inconsistencias_tr_nao_identificado_devolve_200_com_motivo(
 def test_detectar_inconsistencias_processo_inexistente_devolve_404(cliente_teste):
     resposta = cliente_teste.post("/processos/999/detectar-inconsistencias")
     assert resposta.status_code == 404
+
+
+# ---------- Modo estático do demo público (Fase 3, app/demo_estatico.py) ----------
+#
+# DEMO_ESTATICO é lido do ambiente uma vez, na importação de app/config.py
+# (mesmo padrão de GEMINI_API_KEY) — por isso o monkeypatch aqui é direto
+# em app.demo_estatico.DEMO_ESTATICO (o nome que a função de bloqueio
+# consulta), não na variável de ambiente, que não teria efeito depois do
+# módulo já importado.
+
+
+def test_criar_processo_bloqueado_em_modo_demo_estatico(cliente_teste, monkeypatch):
+    monkeypatch.setattr("app.demo_estatico.DEMO_ESTATICO", True)
+
+    resposta = cliente_teste.post("/processos", data={"nome": "Não deveria criar"})
+
+    assert resposta.status_code == 403
+    assert "demonstração" in resposta.json()["detail"]
+
+
+def test_analisar_processo_bloqueado_em_modo_demo_estatico(cliente_teste, monkeypatch):
+    # Processo criado ANTES do modo estático ligar (senão a própria criação
+    # já bloquearia) — confirma que /analisar bloqueia mesmo pra um
+    # processo que já existe de verdade, não só quando o id é inventado.
+    resposta_criacao = cliente_teste.post("/processos", data={"nome": "Processo existente"})
+    processo_id = resposta_criacao.json()["id"]
+
+    monkeypatch.setattr("app.demo_estatico.DEMO_ESTATICO", True)
+    resposta = cliente_teste.post(f"/processos/{processo_id}/analisar")
+
+    assert resposta.status_code == 403
+
+
+def test_perguntar_bloqueado_em_modo_demo_estatico(cliente_teste, monkeypatch):
+    monkeypatch.setattr("app.demo_estatico.DEMO_ESTATICO", True)
+
+    resposta = cliente_teste.post("/processos/999/perguntar", json={"pergunta": "qualquer"})
+
+    assert resposta.status_code == 403
+
+
+def test_detectar_inconsistencias_bloqueado_em_modo_demo_estatico(cliente_teste, monkeypatch):
+    monkeypatch.setattr("app.demo_estatico.DEMO_ESTATICO", True)
+
+    resposta = cliente_teste.post("/processos/999/detectar-inconsistencias")
+
+    assert resposta.status_code == 403
+
+
+def test_listar_e_obter_processo_continuam_liberados_em_modo_demo_estatico(
+    cliente_teste, monkeypatch
+):
+    # Modo estático bloqueia só escrita — leitura (listar, obter) continua
+    # liberada, porque é exatamente o que o demo público precisa mostrar.
+    resposta_criacao = cliente_teste.post("/processos", data={"nome": "Antes do modo estático"})
+    processo_id = resposta_criacao.json()["id"]
+
+    monkeypatch.setattr("app.demo_estatico.DEMO_ESTATICO", True)
+
+    assert cliente_teste.get("/processos").status_code == 200
+    assert cliente_teste.get(f"/processos/{processo_id}").status_code == 200
+

@@ -14,6 +14,7 @@ from fastapi import APIRouter, File, Form, UploadFile
 
 from app.config import UPLOAD_DIR
 from app.db.repositorio import criar_processo, listar_processos, obter_processo
+from app.demo_estatico import bloquear_se_demo_estatico
 from app.pipeline import ProcessoNaoEncontradoError, processar_processo
 
 router = APIRouter()
@@ -28,7 +29,11 @@ def criar_processo_e_salvar_arquivos(
     Compartilhado entre a rota JSON (POST /processos) e o formulário HTML
     (POST /processos/novo, app/rotas/paginas.py) — as duas fazem exatamente
     a mesma coisa aqui, só o que devolvem depois é diferente.
+
+    Checagem de modo estático (Fase 3) fica aqui, não em cada rota
+    separada — assim as duas ficam cobertas com um só lugar de manutenção.
     """
+    bloquear_se_demo_estatico()
     processo_id = criar_processo(dados)
 
     pasta_processo = Path(UPLOAD_DIR) / str(processo_id)
@@ -87,6 +92,7 @@ def analisar_processo_rota(id: int, forcar: bool = False) -> dict:
     arquivos" passa pelos tratadores centralizados de app/erros.py (com o
     log), em vez de um HTTPException solto que os ignora.
     """
+    bloquear_se_demo_estatico()
     pasta_processo = Path(UPLOAD_DIR) / str(id)
     caminhos = (
         sorted(str(caminho) for caminho in pasta_processo.iterdir() if caminho.is_file())

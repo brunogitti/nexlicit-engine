@@ -26,6 +26,9 @@
 #                                        GEMINI_API_KEY/MODEL) — a chamada
 #                                        nem chega a ser tentada; não é culpa
 #                                        do arquivo enviado nem do Gemini
+#   ModoDemoEstaticoError       -> 403  rota de escrita bloqueada porque o
+#                                        modo estático do demo público está
+#                                        ativo (Fase 3, app/demo_estatico.py)
 #
 # Todo tratador loga a exceção com traceback (logging, nível ERROR) antes de
 # montar a resposta — mesmo os 400/404/409 "esperados". Assim o terminal do
@@ -39,6 +42,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.db.repositorio import RegistroNaoEncontradoError
+from app.demo_estatico import ModoDemoEstaticoError
 from app.ia.llm_client import (
     ConfiguracaoAusenteError,
     ContextoGrandeDemaisError,
@@ -146,3 +150,9 @@ def registrar_tratadores_de_erro(app: FastAPI) -> None:
             requisicao,
             erro,
         )
+
+    @app.exception_handler(ModoDemoEstaticoError)
+    async def _tratar_modo_demo_estatico(
+        requisicao: Request, erro: ModoDemoEstaticoError
+    ) -> JSONResponse:
+        return _resposta_erro(403, str(erro), requisicao, erro)
