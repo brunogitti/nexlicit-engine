@@ -6,7 +6,10 @@ habilitação, responde perguntas em linguagem natural sobre o conteúdo, e
 compara o corpo do edital com o Termo de Referência em busca de
 inconsistências.
 
-**[Ver demo ao vivo](#)** *(link do Render, adicionar após o deploy)*
+**[Ver demo ao vivo](https://nexlicit-engine-demo.onrender.com/processos/1/checklist)**
+
+*O plano gratuito do Render "dorme" após 15 minutos sem tráfego — o
+primeiro acesso pode levar de 30 a 60 segundos para carregar.*
 
 ## O problema
 
