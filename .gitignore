@@ -4,6 +4,13 @@
 # Banco de dados local (SQLite).
 *.db
 
+# Exceção: demo.db não tem dado real nenhum -- é gerado por
+# demo/edital_ficticio/gerar_demo_db.py a partir do edital fictício da
+# mesma pasta, e é o banco fixo que a instância pública (modo estático)
+# usa pra não depender de chamada de IA em tempo de execução. Qualquer
+# outro *.db continua bloqueado por padrão pela regra acima.
+!demo/edital_ficticio/demo.db
+
 # Arquivos enviados pelos usuários pela própria aplicação.
 uploads/
 
