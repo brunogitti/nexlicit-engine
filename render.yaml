@@ -1,0 +1,38 @@
+# Blueprint do Render (Fase 3) — a instância pública de demonstração do
+# NexLicit Engine. Deploy: painel do Render > New > Blueprint > apontar
+# pra este repositório; o Render lê este arquivo sozinho.
+#
+# "runtime: python" (não "env: python", que é o nome antigo/depreciado do
+# mesmo campo — conferido ao vivo na documentação atual do Render em
+# 2026-08, não copiado de tutorial desatualizado).
+#
+# Sem banco gerenciado do Render: demo.db já vai comitado no repositório
+# (demo/edital_ficticio/demo.db, ver .gitignore) — nada pra provisionar.
+#
+# Sem GEMINI_API_KEY aqui de propósito: com NEXLICIT_DEMO_ESTATICO=1,
+# nenhuma rota chega a criar o cliente do Gemini (app/ia/llm_client.py
+# cria o cliente só dentro de cada função, nunca na importação do
+# módulo) — não faz sentido colocar um segredo de verdade numa instância
+# pública que estruturalmente nunca o usa.
+services:
+  - name: nexlicit-engine-demo
+    type: web
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Bloqueia toda rota de escrita (criar processo, analisar,
+      # perguntar, detectar inconsistências) — ver app/demo_estatico.py.
+      - key: NEXLICIT_DEMO_ESTATICO
+        value: "1"
+      # Obrigatório mesmo apontando pro banco fictício: a trava de
+      # app/db/conexao.py bloqueia QUALQUER conexão sem caminho_banco
+      # explícito e sem esta variável, não só quando o caminho é
+      # literalmente o do banco real (ver o comentário da própria trava).
+      - key: NEXLICIT_USE_BANCO_REAL
+        value: "1"
+      # Aponta pro banco fictício comitado, não pro nexlicit.db real
+      # (que nem existe neste repositório — está no .gitignore).
+      - key: DATABASE_PATH
+        value: demo/edital_ficticio/demo.db

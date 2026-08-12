@@ -1,0 +1,16 @@
+# Dependências extras pra rodar a suíte de testes localmente — não fazem
+# parte do build de produção (ver requirements.txt e render.yaml).
+# Instalar com: pip install -r requirements.txt -r requirements-dev.txt
+-r requirements.txt
+
+pytest
+httpx2  # só usado pelo TestClient nos testes (tests/test_rotas.py); não é
+        # necessário para rodar o app em produção (httpx puro está deprecated
+        # para esse uso, por isso o "2")
+playwright  # só usado nos testes de ponta a ponta da seção de perguntas
+            # (tests/test_perguntas_ui.py, Fase 2/Camada 2) — TestClient não
+            # executa JavaScript, e é o JS de app/static/js/perguntas.js que
+            # monta o card de resposta na tela. Usa o Edge já instalado no
+            # sistema (channel="msedge"), não baixa Chromium à parte — depois
+            # de instalar o pacote, rodar uma vez:
+            #   python -m playwright install msedge
