@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.db.repositorio import (
+    atualizar_status_checklist,
     atualizar_status_exigencia,
     criar_arquivo,
     criar_processo,
@@ -76,6 +77,76 @@ def test_painel_principal_com_dados_mostra_cards(cliente_teste):
     assert "Dispensa 001/2026" in resposta.text
     assert "Prefeitura Teste" in resposta.text
     assert "Nenhum processo analisado ainda" not in resposta.text
+    # Data de criação (dd/mm/aaaa) e atributo de busca do JS de filtro
+    # (Passo 7, polimento de necessidade real, 13/08/2026).
+    assert "Criado em " in resposta.text
+    assert 'data-busca="dispensa 001/2026 prefeitura teste"' in resposta.text
+    assert 'id="busca-processos-input"' in resposta.text
+
+
+def test_painel_principal_processo_com_falha_de_checklist_mostra_indicador_de_erro(cliente_teste):
+    # Levantamento visual do dashboard (13/08/2026): antes desta correção,
+    # um processo cuja análise falhou (ex.: 503 do Gemini) ficava com o
+    # card sem NENHUM indicador -- igual a "nunca analisado". Confirma que
+    # agora aparece um aviso claro, com link pro fluxo de retry que
+    # analisando.html já tem (não uma tela nova).
+    processo_id = criar_processo({"nome": "Pregão com falha"}, caminho_banco=cliente_teste.caminho_db)
+    atualizar_status_checklist(
+        processo_id, sucesso=False, erro="falha ao chamar a API do Gemini: 503",
+        caminho_banco=cliente_teste.caminho_db,
+    )
+
+    resposta = cliente_teste.get("/")
+
+    assert resposta.status_code == 200
+    assert "análise falhou" in resposta.text
+    assert f'href="/processos/{processo_id}/analisando?forcar=true"' in resposta.text
+    assert "conferidas" not in resposta.text
+
+
+def test_painel_principal_processo_nunca_analisado_nao_mostra_indicador_nenhum(cliente_teste):
+    # Diferente do caso de falha acima: um processo criado mas nunca
+    # analisado (checklist_verificado_em NULL) não deve mostrar nem o
+    # badge de progresso nem o aviso de erro -- mesmo comportamento de
+    # antes desta correção pra este caso específico.
+    criar_processo({"nome": "Pregão recém-criado"}, caminho_banco=cliente_teste.caminho_db)
+
+    resposta = cliente_teste.get("/")
+
+    assert resposta.status_code == 200
+    assert "análise falhou" not in resposta.text
+    assert "conferidas" not in resposta.text
+
+
+def test_painel_principal_processo_analisado_com_sucesso_mostra_badge_normal(cliente_teste):
+    processo_id = criar_processo({"nome": "Pregão OK"}, caminho_banco=cliente_teste.caminho_db)
+    criar_arquivo(
+        processo_id,
+        {"nome_arquivo": "edital.pdf", "tipo": "pdf"},
+        caminho_banco=cliente_teste.caminho_db,
+    )
+    salvar_exigencias(
+        processo_id,
+        [
+            {
+                "categoria": "habilitacao_juridica",
+                "descricao": "Exigência de teste",
+                "trecho": "trecho",
+                "arquivo_origem": "edital.pdf",
+                "obrigatorio_para": "todos",
+                "confianca": "localizado",
+            }
+        ],
+        caminho_banco=cliente_teste.caminho_db,
+    )
+    atualizar_status_checklist(processo_id, sucesso=True, erro=None, caminho_banco=cliente_teste.caminho_db)
+
+    resposta = cliente_teste.get("/")
+
+    assert resposta.status_code == 200
+    assert "0 de 1 conferidas" in resposta.text
+    assert "análise falhou" not in resposta.text
+    assert f'href="/processos/{processo_id}/checklist"' in resposta.text
 
 
 def test_get_processos_continua_somente_json_sem_ramificacao_html(cliente_teste):

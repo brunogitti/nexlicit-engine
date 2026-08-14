@@ -171,6 +171,22 @@ main.wrap{padding:36px 24px 80px;}
   margin-bottom:28px;
 }
 .lista-processos{display:flex; flex-direction:column; gap:14px;}
+.busca-processos{margin-bottom:18px;}
+/* Mesmo padrão visual do campo de pergunta do checklist
+   (.form-pergunta input[type="text"]) -- reaproveitado, não uma cor/
+   borda nova só pra este campo. */
+.busca-processos input[type="search"]{
+  width:100%;
+  max-width:420px;
+  font-family:'IBM Plex Sans', sans-serif;
+  font-size:16px;
+  padding:12px 14px;
+  border:1px solid var(--line-strong);
+  border-radius:4px;
+  background:var(--paper);
+  color:var(--ink);
+}
+.busca-sem-resultado{margin-top:18px; color:var(--ink-soft); font-size:0.9rem;}
 .card-processo{
   display:block;
   background:var(--card);
@@ -179,6 +195,13 @@ main.wrap{padding:36px 24px 80px;}
   padding:18px 22px;
   transition:box-shadow .2s ease, transform .2s ease;
 }
+/* Sem isso, "display:block" acima (regra de autor) sobrescreve o
+   "display:none" que o navegador aplicaria sozinho pro atributo HTML
+   "hidden" (regra do user-agent, perde pra regra de autor mesmo com
+   especificidade parecida) -- o card ficaria com o atributo "hidden" mas
+   continuaria visível na tela. Achado rodando o teste de ponta a ponta
+   da busca (lista_processos.js), não só por inspeção. */
+.card-processo[hidden]{display:none;}
 .card-processo:hover{box-shadow:var(--shadow); transform:translateY(-2px);}
 .card-processo-cabecalho{
   display:flex; align-items:center; justify-content:space-between;
@@ -191,6 +214,19 @@ main.wrap{padding:36px 24px 80px;}
   border-radius:20px;
   border:1px solid var(--line-strong);
   color:var(--ink-soft);
+  flex-shrink:0;
+}
+/* Card de processo cuja análise foi tentada e falhou (ex.: erro 503 da
+   API do Gemini) — mesma forma de pílula do .progresso-tag, cor
+   reaproveitada de .resposta-nao-encontrada/.selo-inferido (--stamp,
+   mesmo par de opacidade 0.12/0.4), não uma cor de erro nova. */
+.progresso-tag-erro{
+  font-size:0.74rem;
+  padding:4px 10px;
+  border-radius:20px;
+  background:rgba(139,46,46,0.12);
+  border:1px solid rgba(139,46,46,0.4);
+  color:var(--stamp);
   flex-shrink:0;
 }
 .card-processo-meta{margin-top:6px; font-size:0.78rem; color:var(--ink-soft);}

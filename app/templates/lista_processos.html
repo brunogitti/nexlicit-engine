@@ -8,24 +8,34 @@
 </div>
 
 {% if processos %}
+<div class="busca-processos">
+  <input type="search" id="busca-processos-input" placeholder="Buscar por nome ou órgão..." aria-label="Buscar processos">
+</div>
 <div class="lista-processos">
   {% for p in processos %}
-  <a class="card-processo" href="/processos/{{ p.id }}/checklist">
+  {# Falha de checklist: leva pra tela de "analisando" com ?forcar=true em
+     vez do checklist (que ficaria vazio, sem exigência nenhuma pra
+     mostrar) -- reaproveita o fluxo de retry que analisando.html já tem,
+     não é tela nova. #}
+  <a class="card-processo" href="{% if p.checklist_sucesso == 0 %}/processos/{{ p.id }}/analisando?forcar=true{% else %}/processos/{{ p.id }}/checklist{% endif %}" data-busca="{{ p.busca_texto }}">
     <div class="card-processo-cabecalho">
       <h2>{{ p.nome }}</h2>
-      {% if p.total_exigencias %}
+      {% if p.checklist_sucesso == 0 %}
+      <span class="progresso-tag-erro mono" title="{{ p.checklist_erro }}">análise falhou — tentar de novo</span>
+      {% elif p.total_exigencias %}
       <span class="progresso-tag mono">{{ p.exigencias_feitas }} de {{ p.total_exigencias }} conferidas</span>
       {% endif %}
     </div>
     <p class="card-processo-meta mono">
-      {%- if p.orgao %}{{ p.orgao }}{% endif -%}
+      Criado em {{ p.criado_em_formatado }}
+      {%- if p.orgao %} · {{ p.orgao }}{% endif -%}
       {%- if p.modalidade %} · {{ p.modalidade }}{% endif -%}
-      {%- if p.data_sessao %} · {{ p.data_sessao }}{% endif -%}
-      {%- if not p.orgao and not p.modalidade and not p.data_sessao %}sem dados adicionais{% endif -%}
+      {%- if p.data_sessao %} · sessão {{ p.data_sessao }}{% endif -%}
     </p>
   </a>
   {% endfor %}
 </div>
+<p id="busca-sem-resultado" class="busca-sem-resultado" hidden>Nenhum processo encontrado para essa busca.</p>
 {% else %}
 <div class="estado-vazio">
   <span class="eyebrow">Nenhum processo ainda</span>
@@ -35,4 +45,5 @@
 </div>
 {% endif %}
 
+<script src="{{ url_for('static', path='/js/lista_processos.js') }}"></script>
 {% endblock %}

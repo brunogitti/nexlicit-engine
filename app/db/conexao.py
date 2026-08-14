@@ -90,6 +90,11 @@ _COLUNAS_ADITIVAS = [
     ("processo", "inconsistencias_verificado_em", "TEXT"),
     ("processo", "inconsistencias_comparacao_possivel", "INTEGER"),
     ("processo", "inconsistencias_motivo_impossibilidade", "TEXT"),
+    # Levantamento visual do dashboard, 13/08/2026 — ver comentário na
+    # CREATE TABLE processo, em schema.sql, pro que cada uma significa.
+    ("processo", "checklist_verificado_em", "TEXT"),
+    ("processo", "checklist_sucesso", "INTEGER"),
+    ("processo", "checklist_erro", "TEXT"),
 ]
 
 

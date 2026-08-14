@@ -486,3 +486,56 @@ def test_atualizar_status_deteccao_inconsistencias_sobrescreve_rodada_anterior(c
     processo = obter_processo(processo_id, caminho_banco=caminho_db)
     assert processo["inconsistencias_comparacao_possivel"] == 1
     assert processo["inconsistencias_motivo_impossibilidade"] is None
+
+
+def test_atualizar_status_checklist_persiste_sucesso(caminho_db):
+    from app.db.repositorio import atualizar_status_checklist
+
+    processo_id = criar_processo({"nome": "Processo teste"}, caminho_banco=caminho_db)
+
+    atualizar_status_checklist(processo_id, sucesso=True, erro=None, caminho_banco=caminho_db)
+
+    processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo["checklist_verificado_em"] is not None
+    assert processo["checklist_sucesso"] == 1
+    assert processo["checklist_erro"] is None
+
+
+def test_atualizar_status_checklist_persiste_falha(caminho_db):
+    from app.db.repositorio import atualizar_status_checklist
+
+    processo_id = criar_processo({"nome": "Processo teste"}, caminho_banco=caminho_db)
+
+    atualizar_status_checklist(
+        processo_id, sucesso=False, erro="falha ao chamar a API do Gemini: 503", caminho_banco=caminho_db
+    )
+
+    processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo["checklist_verificado_em"] is not None
+    assert processo["checklist_sucesso"] == 0
+    assert processo["checklist_erro"] == "falha ao chamar a API do Gemini: 503"
+
+
+def test_atualizar_status_checklist_sobrescreve_tentativa_anterior(caminho_db):
+    from app.db.repositorio import atualizar_status_checklist
+
+    processo_id = criar_processo({"nome": "Processo teste"}, caminho_banco=caminho_db)
+
+    atualizar_status_checklist(processo_id, sucesso=False, erro="erro antigo", caminho_banco=caminho_db)
+    atualizar_status_checklist(processo_id, sucesso=True, erro=None, caminho_banco=caminho_db)
+
+    processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo["checklist_sucesso"] == 1
+    assert processo["checklist_erro"] is None
+
+
+def test_processo_recem_criado_tem_checklist_verificado_em_nulo(caminho_db):
+    # Nunca tentou analisar -- diferente de "tentou e falhou" (sucesso=0),
+    # que também tem total_exigencias=0 mas checklist_verificado_em
+    # preenchido. É essa diferença que a listagem usa pra não confundir
+    # os dois estados.
+    processo_id = criar_processo({"nome": "Processo teste"}, caminho_banco=caminho_db)
+
+    processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo["checklist_verificado_em"] is None
+    assert processo["checklist_sucesso"] is None

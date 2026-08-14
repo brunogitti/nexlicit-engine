@@ -101,6 +101,56 @@ def test_processar_processo_fluxo_completo(tmp_path, caminho_db, monkeypatch):
     assert "Certidao Negativa de Debitos" in linhas_texto[0]["texto"]
 
 
+def test_processar_processo_sucesso_persiste_status_checklist(tmp_path, caminho_db, monkeypatch):
+    caminho_pdf = tmp_path / "edital.pdf"
+    _criar_pdf_exemplo(caminho_pdf)
+    processo_id = criar_processo({"nome": "Processo de teste"}, caminho_banco=caminho_db)
+    monkeypatch.setattr(pipeline, "extrair_checklist", _checklist_falso)
+
+    processar_processo(processo_id, [str(caminho_pdf)], caminho_banco=caminho_db)
+
+    processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo is not None
+    assert processo["checklist_verificado_em"] is not None
+    assert processo["checklist_sucesso"] == 1
+    assert processo["checklist_erro"] is None
+
+
+def test_processar_processo_falha_no_checklist_persiste_status_e_relanca_erro(
+    tmp_path, caminho_db, monkeypatch
+):
+    # Levantamento visual do dashboard (13/08/2026): um processo com falha
+    # na chamada de IA do checklist (ex.: 503 do Gemini) ficava com o
+    # mesmo estado de "nunca analisado" na listagem -- sem diferenciar.
+    # Este teste reproduz a falha e confirma as duas coisas que a correção
+    # precisa garantir: (1) o status fica registrado no banco, (2) o
+    # comportamento de erro pro chamador não muda (a exceção original
+    # ainda sobe, pra rota HTTP continuar devolvendo 502 normalmente).
+    caminho_pdf = tmp_path / "edital.pdf"
+    _criar_pdf_exemplo(caminho_pdf)
+    processo_id = criar_processo({"nome": "Processo de teste"}, caminho_banco=caminho_db)
+
+    def _checklist_com_falha(texto_completo, contexto_processo):
+        raise RuntimeError("falha ao chamar a API do Gemini: 503 UNAVAILABLE")
+
+    monkeypatch.setattr(pipeline, "extrair_checklist", _checklist_com_falha)
+
+    with pytest.raises(RuntimeError, match="503 UNAVAILABLE"):
+        processar_processo(processo_id, [str(caminho_pdf)], caminho_banco=caminho_db)
+
+    processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo is not None
+    # a extração de texto (Passo 2, sem IA) já tinha rodado e salvo o
+    # arquivo antes da chamada de IA falhar -- é exatamente essa
+    # combinação (arquivo existe, exigência não) que confundia a listagem
+    # com "nunca analisado" antes desta correção.
+    assert len(processo["arquivos"]) == 1
+    assert len(processo["exigencias"]) == 0
+    assert processo["checklist_verificado_em"] is not None
+    assert processo["checklist_sucesso"] == 0
+    assert "503 UNAVAILABLE" in processo["checklist_erro"]
+
+
 def test_processar_processo_inexistente_da_erro_claro(caminho_db):
     with pytest.raises(ProcessoNaoEncontradoError, match="999"):
         processar_processo(999, [], caminho_banco=caminho_db)

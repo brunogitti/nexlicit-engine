@@ -11,6 +11,7 @@ import time
 from typing import Any
 
 from app.db.repositorio import (
+    atualizar_status_checklist,
     atualizar_status_deteccao_inconsistencias,
     criar_arquivo,
     limpar_analise_do_processo,
@@ -160,9 +161,24 @@ def processar_processo(
         "objeto": processo.get("objeto"),
     }
 
-    exigencias_extraidas = extrair_checklist(texto_completo, contexto_processo)
-    exigencias_validadas = validar_exigencias(exigencias_extraidas, documentos)
-    salvar_exigencias(processo_id, exigencias_validadas, caminho_banco=caminho_banco)
+    # Registra sucesso/falha da extração do checklist (colunas
+    # "checklist_*" de "processo", ver comentário na CREATE TABLE em
+    # schema.sql) — sem isso, a listagem não consegue diferenciar "nunca
+    # analisado" de "tentou e falhou no meio" (achado no levantamento
+    # visual do dashboard, 13/08/2026). Na falha, registra e RELANÇA a
+    # mesma exceção original — o comportamento pro chamador (rota HTTP
+    # devolve 502 via app/erros.py, tela de espera mostra "análise
+    # falhou") não muda, só passa a ficar registrado no banco também.
+    try:
+        exigencias_extraidas = extrair_checklist(texto_completo, contexto_processo)
+        exigencias_validadas = validar_exigencias(exigencias_extraidas, documentos)
+        salvar_exigencias(processo_id, exigencias_validadas, caminho_banco=caminho_banco)
+    except Exception as erro:
+        atualizar_status_checklist(
+            processo_id, sucesso=False, erro=str(erro), caminho_banco=caminho_banco
+        )
+        raise
+    atualizar_status_checklist(processo_id, sucesso=True, erro=None, caminho_banco=caminho_banco)
 
     # Requisitos técnicos por item (Passo 8) — determinístico, sem IA e sem
     # validador (o trecho já sai literal do texto-fonte, por construção).

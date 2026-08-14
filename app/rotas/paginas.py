@@ -11,6 +11,7 @@
 # erro" — ela já existe, testada, na rota JSON.
 
 import re
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
@@ -303,6 +304,16 @@ def _estado_inconsistencias(processo: dict, achados: list[dict]) -> dict:
     return {"estado": "com_achados", "grupos": _agrupar_inconsistencias_por_tipo(achados)}
 
 
+def _formatar_data_criacao(criado_em_iso: str) -> str:
+    """Converte o "criado_em" gravado (ISO 8601, sempre UTC — ver
+    repositorio._agora_iso) pro formato dd/mm/aaaa em fuso local, pro
+    card da listagem. Guardar em UTC e formatar em local na exibição é
+    o mesmo princípio já usado pro resto do projeto: consistência no
+    banco, conversão só na hora de mostrar pra gente."""
+    momento = datetime.fromisoformat(criado_em_iso)
+    return momento.astimezone().strftime("%d/%m/%Y")
+
+
 @router.get("/")
 def painel_principal(request: Request):
     """Painel principal (histórico de processos) — a tela que você vê ao
@@ -325,6 +336,11 @@ def painel_principal(request: Request):
                 **processo,
                 "total_exigencias": len(exigencias),
                 "exigencias_feitas": sum(1 for e in exigencias if e["status_check"] == "ok"),
+                "criado_em_formatado": _formatar_data_criacao(processo["criado_em"]),
+                # texto simples pra busca client-side (lista_processos.js)
+                # filtrar sem precisar ler vários elementos do DOM — já
+                # normalizado (minúsculo) aqui, não no JS.
+                "busca_texto": f"{processo['nome']} {processo.get('orgao') or ''}".lower(),
             }
         )
 

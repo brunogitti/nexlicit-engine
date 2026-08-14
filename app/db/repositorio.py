@@ -420,6 +420,46 @@ def obter_inconsistencias(processo_id: int, caminho_banco: str | None = None) ->
         conexao.close()
 
 
+def atualizar_status_checklist(
+    processo_id: int,
+    sucesso: bool,
+    erro: str | None,
+    caminho_banco: str | None = None,
+) -> None:
+    """Registra o resultado da ÚLTIMA tentativa de extrair o checklist
+    (Passo 3/6) nas colunas "checklist_*" de "processo" (ver comentário na
+    CREATE TABLE, em schema.sql, pro porquê disso existir: sem isso, a UI
+    não consegue distinguir "nunca analisado" de "analisado e deu 0
+    exigências de verdade" de "tentou analisar e falhou no meio").
+
+    Chamado nos dois casos (sucesso=True quando o checklist foi salvo,
+    sucesso=False quando a extração ou o salvamento falhou) — diferente da
+    Camada 3, aqui TEM que ser chamado até na falha, porque é exatamente o
+    caso que este registro existe pra cobrir. Ver app.pipeline.
+    processar_processo, que chama isto dentro de um except e relança a
+    exceção original em seguida — o comportamento de erro pro chamador
+    (HTTP 502, tela "análise falhou") não muda, só passa a ficar
+    registrado no banco também."""
+    conexao = obter_conexao(caminho_banco)
+    try:
+        conexao.execute(
+            """
+            UPDATE processo
+            SET checklist_verificado_em = ?,
+                checklist_sucesso = ?,
+                checklist_erro = ?
+            WHERE id = ?
+            """,
+            (_agora_iso(), 1 if sucesso else 0, erro, processo_id),
+        )
+        conexao.commit()
+    except Exception:
+        conexao.rollback()
+        raise
+    finally:
+        conexao.close()
+
+
 def atualizar_status_deteccao_inconsistencias(
     processo_id: int,
     comparacao_possivel: bool,

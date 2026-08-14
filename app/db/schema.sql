@@ -31,7 +31,21 @@ CREATE TABLE IF NOT EXISTS processo (
     -- pra este processo = rodou, comparou, não achou nada (estado positivo).
     inconsistencias_verificado_em TEXT,
     inconsistencias_comparacao_possivel INTEGER,
-    inconsistencias_motivo_impossibilidade TEXT
+    inconsistencias_motivo_impossibilidade TEXT,
+    -- Passo 3/6 (extração do checklist via IA): mesmo problema da Camada 2
+    -- acima, resolvido do mesmo jeito. Sem isso, "0 exigências" não dá pra
+    -- diferenciar de "nunca analisado" nem de "análise tentada e falhou
+    -- antes de salvar qualquer exigência" (ex.: erro 503 da API do Gemini)
+    -- — os três casos chegavam com a mesma contagem zerada na listagem
+    -- (achado no levantamento visual do dashboard, 13/08/2026).
+    -- "checklist_verificado_em" NULL = nunca tentou analisar.
+    -- NOT NULL + "checklist_sucesso" = 0 = tentou e falhou (mensagem do
+    -- erro em "checklist_erro").
+    -- NOT NULL + checklist_sucesso = 1 = tentou e completou (0 exigências
+    -- nesse caso é resultado real, não falha).
+    checklist_verificado_em TEXT,
+    checklist_sucesso INTEGER,
+    checklist_erro TEXT
 );
 
 CREATE TABLE IF NOT EXISTS arquivo (
