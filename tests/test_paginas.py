@@ -85,6 +85,65 @@ def test_painel_principal_com_dados_mostra_cards(cliente_teste):
     assert 'id="busca-processos-input"' in resposta.text
 
 
+def test_painel_principal_mostra_botao_novo_processo_uma_vez_so(cliente_teste):
+    # Polimento cosmético (Fase 3, Parte 3, 15/08/2026): o botão "+ Novo
+    # processo" aparecia duas vezes (cabeçalho fixo + repetido na própria
+    # listagem) -- agora só o do cabeçalho, que fica visível mesmo
+    # rolando a página.
+    criar_processo({"nome": "Processo qualquer"}, caminho_banco=cliente_teste.caminho_db)
+
+    resposta = cliente_teste.get("/")
+
+    assert resposta.text.count('href="/processos/novo"') == 1
+
+
+def test_painel_principal_mostra_contagem_de_processos_com_plural_correto(cliente_teste):
+    criar_processo({"nome": "Processo único"}, caminho_banco=cliente_teste.caminho_db)
+    resposta_um = cliente_teste.get("/")
+    assert "1 processo" in resposta_um.text
+    assert "1 processos" not in resposta_um.text
+
+    criar_processo({"nome": "Segundo processo"}, caminho_banco=cliente_teste.caminho_db)
+    resposta_dois = cliente_teste.get("/")
+    assert "2 processos" in resposta_dois.text
+
+
+def test_painel_principal_badge_por_percentual_de_conferencia(cliente_teste):
+    processo_id = criar_processo({"nome": "Processo com progresso"}, caminho_banco=cliente_teste.caminho_db)
+    criar_arquivo(processo_id, {"nome_arquivo": "edital.pdf", "tipo": "pdf"}, caminho_banco=cliente_teste.caminho_db)
+    exigencias_id = salvar_exigencias(
+        processo_id,
+        [
+            {
+                "categoria": "habilitacao_juridica", "descricao": "Exigência 1", "trecho": "t1",
+                "arquivo_origem": "edital.pdf", "obrigatorio_para": "todos", "confianca": "localizado",
+            },
+            {
+                "categoria": "habilitacao_juridica", "descricao": "Exigência 2", "trecho": "t2",
+                "arquivo_origem": "edital.pdf", "obrigatorio_para": "todos", "confianca": "localizado",
+            },
+        ],
+        caminho_banco=cliente_teste.caminho_db,
+    )
+
+    # 0 de 2 -- badge neutro, sem classe de progresso parcial/completo.
+    resposta_zero = cliente_teste.get("/")
+    assert 'class="progresso-tag mono"' in resposta_zero.text
+    assert "progresso-tag--parcial" not in resposta_zero.text
+    assert "progresso-tag--completo" not in resposta_zero.text
+
+    # 1 de 2 -- parcial.
+    atualizar_status_exigencia(exigencias_id[0], "ok", caminho_banco=cliente_teste.caminho_db)
+    resposta_parcial = cliente_teste.get("/")
+    assert 'class="progresso-tag--parcial mono"' in resposta_parcial.text
+    assert "progresso-tag--completo" not in resposta_parcial.text
+
+    # 2 de 2 -- completo.
+    atualizar_status_exigencia(exigencias_id[1], "ok", caminho_banco=cliente_teste.caminho_db)
+    resposta_completo = cliente_teste.get("/")
+    assert 'class="progresso-tag--completo mono"' in resposta_completo.text
+
+
 def test_painel_principal_processo_com_falha_de_checklist_mostra_indicador_de_erro(cliente_teste):
     # Levantamento visual do dashboard (13/08/2026): antes desta correção,
     # um processo cuja análise falhou (ex.: 503 do Gemini) ficava com o

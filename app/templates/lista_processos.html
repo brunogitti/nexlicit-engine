@@ -4,10 +4,10 @@
 
 <div class="cabecalho-lista">
   <h1 style="margin:0;">Processos</h1>
-  <a class="btn btn-primary" href="/processos/novo">+ Novo processo</a>
 </div>
 
 {% if processos %}
+<p class="contagem-lista mono">{{ processos|length }} processo{{ "s" if processos|length != 1 else "" }}</p>
 <div class="busca-processos">
   <input type="search" id="busca-processos-input" placeholder="Buscar por nome ou órgão..." aria-label="Buscar processos">
 </div>
@@ -23,7 +23,7 @@
       {% if p.checklist_sucesso == 0 %}
       <span class="progresso-tag-erro mono" title="{{ p.checklist_erro }}">análise falhou — tentar de novo</span>
       {% elif p.total_exigencias %}
-      <span class="progresso-tag mono">{{ p.exigencias_feitas }} de {{ p.total_exigencias }} conferidas</span>
+      <span class="{{ p.progresso_classe }} mono">{{ p.exigencias_feitas }} de {{ p.total_exigencias }} conferidas</span>
       {% endif %}
     </div>
     <p class="card-processo-meta mono">

@@ -339,11 +339,26 @@ def painel_principal(request: Request):
     for processo in processos:
         detalhe = obter_processo(processo["id"])
         exigencias = detalhe["exigencias"] if detalhe else []
+        total = len(exigencias)
+        feitas = sum(1 for e in exigencias if e["status_check"] == "ok")
         processos_com_progresso.append(
             {
                 **processo,
-                "total_exigencias": len(exigencias),
-                "exigencias_feitas": sum(1 for e in exigencias if e["status_check"] == "ok"),
+                "total_exigencias": total,
+                "exigencias_feitas": feitas,
+                # Classe CSS do badge por estado de conferência — mesma
+                # paleta já usada pro card de exigência conferida
+                # (--brass, a paleta não tem verde de propósito, ver
+                # comentário em nexlicit.css): neutro sem nenhuma marcada,
+                # contorno dourado com algumas, preenchido dourado com
+                # todas. Calculado aqui (não no template) pelo mesmo
+                # motivo de "criado_em_formatado" logo abaixo — lógica em
+                # Python, apresentação no Jinja.
+                "progresso_classe": (
+                    "progresso-tag--completo" if total and feitas == total
+                    else "progresso-tag--parcial" if feitas > 0
+                    else "progresso-tag"
+                ),
                 "criado_em_formatado": _formatar_data_criacao(processo["criado_em"]),
                 # texto simples pra busca client-side (lista_processos.js)
                 # filtrar sem precisar ler vários elementos do DOM — já

@@ -160,6 +160,34 @@ main.wrap{padding:36px 24px 80px;}
   background:var(--card);
   color:var(--ink);
 }
+/* O input[type=file] acima já ganha borda/fundo/padding igual aos outros
+   campos, mas o BOTÃO "Escolher arquivos" embutido nele é um elemento à
+   parte (pseudo-elemento do navegador) que essas regras não alcançam --
+   fica com a aparência padrão do sistema operacional, destoando do resto
+   do formulário. "::file-selector-button" é o nome padrão atual (Chrome/
+   Edge/Firefox recentes); "::-webkit-file-upload-button" é o nome antigo
+   do mesmo pseudo-elemento, mantido pelos navegadores baseados em
+   WebKit/Blink por compatibilidade -- os dois precisam da regra repetida
+   porque um navegador que não reconhece um seletor descarta a regra
+   inteira, não só a parte que não entende. */
+.formulario input[type="file"]::file-selector-button,
+.formulario input[type="file"]::-webkit-file-upload-button{
+  font-family:'IBM Plex Sans', sans-serif;
+  font-weight:600;
+  font-size:0.85rem;
+  padding:8px 14px;
+  margin-right:12px;
+  border:1px solid var(--line-strong);
+  border-radius:3px;
+  background:var(--paper-deep);
+  color:var(--ink);
+  cursor:pointer;
+  transition:background .18s ease;
+}
+.formulario input[type="file"]::file-selector-button:hover,
+.formulario input[type="file"]::-webkit-file-upload-button:hover{
+  background:var(--line-strong);
+}
 .formulario button{align-self:flex-start; margin-top:8px;}
 .form-row{
   display:grid;
@@ -177,6 +205,11 @@ main.wrap{padding:36px 24px 80px;}
   gap:16px; flex-wrap:wrap;
   margin-bottom:28px;
 }
+/* Contagem "N processos" -- some com poucos cards a página ficando
+   grande demais de espaço vazio embaixo (achado no levantamento visual
+   do dashboard); não some o vazio, mas dá mais um elemento de conteúdo
+   de verdade (não decorativo) perto do topo, em vez de forçar altura. */
+.contagem-lista{color:var(--ink-soft); margin-bottom:14px;}
 .lista-processos{display:flex; flex-direction:column; gap:14px;}
 .busca-processos{margin-bottom:18px;}
 /* Mesmo padrão visual do campo de pergunta do checklist
@@ -221,6 +254,29 @@ main.wrap{padding:36px 24px 80px;}
   border-radius:20px;
   border:1px solid var(--line-strong);
   color:var(--ink-soft);
+  flex-shrink:0;
+}
+/* Parcial (algumas exigências conferidas, não todas) e completo (todas)
+   -- mesma paleta já usada pro card de exigência conferida
+   (.card-exigencia--conferida, --brass) -- sem inventar verde, mesmo
+   princípio já documentado ali. Achado no levantamento visual do
+   dashboard: hoje o badge fica com a mesma cor neutra em 0%, 50% ou
+   100% conferido, sem diferenciar visualmente o progresso. */
+.progresso-tag--parcial{
+  font-size:0.74rem;
+  padding:4px 10px;
+  border-radius:20px;
+  border:1px solid var(--brass);
+  color:var(--brass);
+  flex-shrink:0;
+}
+.progresso-tag--completo{
+  font-size:0.74rem;
+  padding:4px 10px;
+  border-radius:20px;
+  border:1px solid var(--brass);
+  background:var(--brass);
+  color:var(--paper);
   flex-shrink:0;
 }
 /* Card de processo cuja análise foi tentada e falhou (ex.: erro 503 da
