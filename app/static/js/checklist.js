@@ -22,8 +22,20 @@
   // não de .card-exigencia.
   const checkboxes = Array.from(document.querySelectorAll('.checkbox-exigencia'));
 
+  // BUG CORRIGIDO (15/08/2026): "data-exigencia-ids" só existe no
+  // <article class="card-exigencia"> (o card pai) -- nunca esteve no
+  // <input> em si, provavelmente desde a Mudança 3 (agrupamento de
+  // hipóteses), quando o atributo virou compartilhado pelo card em vez
+  // de exclusivo do checkbox. Ler "checkbox.dataset.exigenciaIds"
+  // direto sempre dava undefined e quebrava aqui (TypeError, antes de
+  // qualquer PATCH ser tentado) -- silenciosamente: o checkbox nativo
+  // ainda marcava visualmente, mas nada era salvo, e nem o card mudava
+  // de cor nem a barra de progresso avançava (o erro acontecia ANTES
+  // dessas atualizações, no fluxo do listener de "change"). Mesmo
+  // padrão de busca que salvarObservacao() já usa corretamente logo
+  // abaixo.
   function idsDoCheckbox(checkbox) {
-    return checkbox.dataset.exigenciaIds.split(',');
+    return checkbox.closest('.card-exigencia').dataset.exigenciaIds.split(',');
   }
 
   const totalExigencias = checkboxes.reduce(function (soma, cb) {
