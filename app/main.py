@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.erros import registrar_tratadores_de_erro
-from app.rotas import exigencias, inconsistencias, paginas, perguntas, processos
+from app.rotas import documentos, exigencias, inconsistencias, paginas, perguntas, processos
 
 # Configuração simples do logging padrão do Python (nada de biblioteca
 # nova): nível INFO (mostra erro e informação geral, sem o ruído de DEBUG de
@@ -43,6 +43,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # também, pelo mesmo motivo.
 app.include_router(paginas.router)
 app.include_router(processos.router)
+app.include_router(documentos.router)
 app.include_router(exigencias.router)
 app.include_router(perguntas.router)
 app.include_router(inconsistencias.router)

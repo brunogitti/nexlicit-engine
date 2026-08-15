@@ -17,7 +17,15 @@ from typing import Annotated
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 
-from app.db.repositorio import listar_processos, obter_inconsistencias, obter_processo
+from app.db.repositorio import (
+    atualizar_empresa,
+    criar_empresa,
+    listar_empresas,
+    listar_processos,
+    obter_empresa,
+    obter_inconsistencias,
+    obter_processo,
+)
 from app.extracao.tabela_itens import normalizar_com_mapa
 from app.ia.llm_client import CATEGORIAS_CHECKLIST, TIPOS_INCONSISTENCIA
 from app.rotas.processos import criar_processo_e_salvar_arquivos
@@ -437,3 +445,112 @@ def tela_checklist(request: Request, id: int):
             "inconsistencias": estado_inconsistencias,
         },
     )
+
+
+# ---------- Fase 4, Camada 0: cadastro de empresas fornecedoras ----------
+#
+# Só HTML, sem contrato JSON próprio (diferente de processo, que tem os
+# dois) -- nada mais no app precisa consumir empresa por HTTP; a Camada 1
+# (geração de declarações) vai chamar repositorio.py direto em Python, no
+# mesmo processo, sem dar a volta por uma API. Sem rota "/empresas/{id}"
+# avulsa (só listar/criar/editar, como pedido) -- o formulário de edição
+# já mostra os dados atuais, cobre a necessidade de "ver uma empresa" sem
+# precisar de uma terceira tela só pra isso.
+#
+# Formulário de novo/editar compartilha o mesmo template (form_empresa.html)
+# -- "empresa" no contexto vem None pra criar, preenchida pra editar.
+
+
+def _dados_formulario_empresa(
+    razao_social: str,
+    cnpj: str,
+    nome_fantasia: str | None,
+    endereco: str | None,
+    representante_legal_nome: str | None,
+    representante_legal_cpf: str | None,
+    representante_legal_cargo: str | None,
+    telefone: str | None,
+    email: str | None,
+    regime_tributario: str | None,
+) -> dict[str, str | None]:
+    return {
+        "razao_social": razao_social,
+        "cnpj": cnpj,
+        "nome_fantasia": nome_fantasia,
+        "endereco": endereco,
+        "representante_legal_nome": representante_legal_nome,
+        "representante_legal_cpf": representante_legal_cpf,
+        "representante_legal_cargo": representante_legal_cargo,
+        "telefone": telefone,
+        "email": email,
+        "regime_tributario": regime_tributario,
+    }
+
+
+@router.get("/empresas")
+def tela_lista_empresas(request: Request):
+    return templates.TemplateResponse(request, "lista_empresas.html", {"empresas": listar_empresas()})
+
+
+@router.get("/empresas/nova")
+def formulario_nova_empresa(request: Request):
+    return templates.TemplateResponse(request, "form_empresa.html", {"empresa": None})
+
+
+@router.post("/empresas/nova")
+async def criar_empresa_via_formulario(
+    razao_social: Annotated[str, Form()],
+    cnpj: Annotated[str, Form()],
+    nome_fantasia: Annotated[str | None, Form()] = None,
+    endereco: Annotated[str | None, Form()] = None,
+    representante_legal_nome: Annotated[str | None, Form()] = None,
+    representante_legal_cpf: Annotated[str | None, Form()] = None,
+    representante_legal_cargo: Annotated[str | None, Form()] = None,
+    telefone: Annotated[str | None, Form()] = None,
+    email: Annotated[str | None, Form()] = None,
+    regime_tributario: Annotated[str | None, Form()] = None,
+):
+    criar_empresa(
+        _dados_formulario_empresa(
+            razao_social, cnpj, nome_fantasia, endereco, representante_legal_nome,
+            representante_legal_cpf, representante_legal_cargo, telefone, email, regime_tributario,
+        )
+    )
+    return RedirectResponse("/empresas", status_code=303)
+
+
+@router.get("/empresas/{id}/editar")
+def formulario_editar_empresa(request: Request, id: int):
+    empresa = obter_empresa(id)
+    if empresa is None:
+        return templates.TemplateResponse(
+            request, "erro_pagina.html", {"mensagem": f"Empresa {id} não encontrada"}, status_code=404,
+        )
+    return templates.TemplateResponse(request, "form_empresa.html", {"empresa": empresa})
+
+
+@router.post("/empresas/{id}/editar")
+async def editar_empresa_via_formulario(
+    id: int,
+    razao_social: Annotated[str, Form()],
+    cnpj: Annotated[str, Form()],
+    nome_fantasia: Annotated[str | None, Form()] = None,
+    endereco: Annotated[str | None, Form()] = None,
+    representante_legal_nome: Annotated[str | None, Form()] = None,
+    representante_legal_cpf: Annotated[str | None, Form()] = None,
+    representante_legal_cargo: Annotated[str | None, Form()] = None,
+    telefone: Annotated[str | None, Form()] = None,
+    email: Annotated[str | None, Form()] = None,
+    regime_tributario: Annotated[str | None, Form()] = None,
+):
+    # RegistroNaoEncontradoError (id inexistente) sobe direto pro tratador
+    # central -> 404 (app/erros.py) -- mesmo princípio do resto do app,
+    # sem try/except redundante só pra deixar passar a mesma exceção.
+    atualizar_empresa(
+        id,
+        _dados_formulario_empresa(
+            razao_social, cnpj, nome_fantasia, endereco, representante_legal_nome,
+            representante_legal_cpf, representante_legal_cargo, telefone, email, regime_tributario,
+        ),
+    )
+    return RedirectResponse("/empresas", status_code=303)

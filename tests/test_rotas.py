@@ -493,3 +493,137 @@ def test_listar_e_obter_processo_continuam_liberados_em_modo_demo_estatico(
     assert cliente_teste.get("/processos").status_code == 200
     assert cliente_teste.get(f"/processos/{processo_id}").status_code == 200
 
+
+# ---------- POST /processos/{id}/gerar-declaracoes (Fase 4, Camada 1) ----------
+
+
+def _dados_empresa_teste() -> dict:
+    return {
+        "razao_social": "Exemplo Fornecedora de Materiais Ltda",
+        "cnpj": "12.345.678/0001-90",
+        "representante_legal_nome": "José da Silva Fictício",
+        "representante_legal_cargo": "Sócio-administrador",
+        "representante_legal_cpf": "000.000.000-00",
+    }
+
+
+def _checklist_com_declaracao(texto_completo, contexto_processo):
+    return [
+        {
+            "categoria": "declaracoes_exigidas",
+            "descricao": "Declaração de não emprego de menor",
+            "base_legal": None,
+            "trecho": "O licitante deve apresentar Certidao Negativa de Debitos.",
+            "obrigatorio_para": "todos",
+        }
+    ]
+
+
+def test_gerar_declaracoes_devolve_docx_valido(cliente_teste, tmp_path, monkeypatch):
+    from app.db.repositorio import criar_empresa
+
+    caminho_pdf = tmp_path / "edital.pdf"
+    _criar_pdf_exemplo(caminho_pdf)
+    with open(caminho_pdf, "rb") as arquivo:
+        resposta_criacao = cliente_teste.post(
+            "/processos",
+            data={"nome": "Pregão Eletrônico 01/2026"},
+            files={"arquivos": ("edital.pdf", arquivo, "application/pdf")},
+        )
+    processo_id = resposta_criacao.json()["id"]
+
+    monkeypatch.setattr("app.pipeline.extrair_checklist", _checklist_com_declaracao)
+    cliente_teste.post(f"/processos/{processo_id}/analisar")
+
+    empresa_id = criar_empresa(_dados_empresa_teste())
+
+    resposta = cliente_teste.post(f"/processos/{processo_id}/gerar-declaracoes?empresa_id={empresa_id}")
+
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert "attachment" in resposta.headers["content-disposition"]
+
+    # O corpo da resposta precisa ser um .docx de verdade, reabrível --
+    # não só bytes com o content-type certo.
+    import io as _io
+
+    import docx as _docx
+
+    documento = _docx.Document(_io.BytesIO(resposta.content))
+    texto_completo = " ".join(p.text for p in documento.paragraphs)
+    assert "Exemplo Fornecedora de Materiais Ltda" in texto_completo
+    assert "Certidao Negativa de Debitos" in texto_completo
+    assert "José da Silva Fictício" in texto_completo
+
+
+def test_gerar_declaracoes_processo_inexistente_devolve_404(cliente_teste):
+    from app.db.repositorio import criar_empresa
+
+    empresa_id = criar_empresa(_dados_empresa_teste())
+
+    resposta = cliente_teste.post(f"/processos/999999/gerar-declaracoes?empresa_id={empresa_id}")
+
+    assert resposta.status_code == 404
+
+
+def test_gerar_declaracoes_empresa_inexistente_devolve_404(cliente_teste, tmp_path, monkeypatch):
+    caminho_pdf = tmp_path / "edital.pdf"
+    _criar_pdf_exemplo(caminho_pdf)
+    with open(caminho_pdf, "rb") as arquivo:
+        resposta_criacao = cliente_teste.post(
+            "/processos", data={"nome": "Processo teste"},
+            files={"arquivos": ("edital.pdf", arquivo, "application/pdf")},
+        )
+    processo_id = resposta_criacao.json()["id"]
+    monkeypatch.setattr("app.pipeline.extrair_checklist", _checklist_com_declaracao)
+    cliente_teste.post(f"/processos/{processo_id}/analisar")
+
+    resposta = cliente_teste.post(f"/processos/{processo_id}/gerar-declaracoes?empresa_id=999999")
+
+    assert resposta.status_code == 404
+
+
+def test_gerar_declaracoes_processo_sem_declaracoes_devolve_400(cliente_teste, tmp_path, monkeypatch):
+    from app.db.repositorio import criar_empresa
+
+    caminho_pdf = tmp_path / "edital.pdf"
+    _criar_pdf_exemplo(caminho_pdf)
+    with open(caminho_pdf, "rb") as arquivo:
+        resposta_criacao = cliente_teste.post(
+            "/processos", data={"nome": "Processo teste"},
+            files={"arquivos": ("edital.pdf", arquivo, "application/pdf")},
+        )
+    processo_id = resposta_criacao.json()["id"]
+    monkeypatch.setattr("app.pipeline.extrair_checklist", _checklist_falso)  # sem categoria declaracoes_exigidas
+    cliente_teste.post(f"/processos/{processo_id}/analisar")
+
+    empresa_id = criar_empresa(_dados_empresa_teste())
+    resposta = cliente_teste.post(f"/processos/{processo_id}/gerar-declaracoes?empresa_id={empresa_id}")
+
+    assert resposta.status_code == 400
+    assert "declaracoes_exigidas" in resposta.json()["detail"] or "Declarações" in resposta.json()["detail"]
+
+
+def test_gerar_declaracoes_empresa_sem_representante_devolve_400(cliente_teste, tmp_path, monkeypatch):
+    from app.db.repositorio import criar_empresa
+
+    caminho_pdf = tmp_path / "edital.pdf"
+    _criar_pdf_exemplo(caminho_pdf)
+    with open(caminho_pdf, "rb") as arquivo:
+        resposta_criacao = cliente_teste.post(
+            "/processos", data={"nome": "Processo teste"},
+            files={"arquivos": ("edital.pdf", arquivo, "application/pdf")},
+        )
+    processo_id = resposta_criacao.json()["id"]
+    monkeypatch.setattr("app.pipeline.extrair_checklist", _checklist_com_declaracao)
+    cliente_teste.post(f"/processos/{processo_id}/analisar")
+
+    dados_sem_representante = {**_dados_empresa_teste(), "representante_legal_nome": None}
+    empresa_id = criar_empresa(dados_sem_representante)
+
+    resposta = cliente_teste.post(f"/processos/{processo_id}/gerar-declaracoes?empresa_id={empresa_id}")
+
+    assert resposta.status_code == 400
+

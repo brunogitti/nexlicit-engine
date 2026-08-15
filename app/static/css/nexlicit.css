@@ -102,6 +102,13 @@ header nav{
   padding:16px 0;
   flex-wrap:wrap;
 }
+.nav-acoes{display:flex; align-items:center; gap:20px;}
+.link-nav{
+  font-size:0.78rem;
+  letter-spacing:0.04em;
+  color:var(--ink-soft);
+}
+.link-nav:hover{color:var(--ink);}
 .logo{display:flex; align-items:center; gap:11px;}
 .logo-mark{flex-shrink:0;}
 .logo-text{display:flex; flex-direction:column; line-height:1;}

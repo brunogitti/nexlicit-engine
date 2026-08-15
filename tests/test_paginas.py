@@ -15,6 +15,7 @@ from app.db.repositorio import (
     atualizar_status_checklist,
     atualizar_status_exigencia,
     criar_arquivo,
+    criar_empresa,
     criar_processo,
     salvar_exigencias,
     salvar_requisitos_item,
@@ -147,6 +148,93 @@ def test_painel_principal_processo_analisado_com_sucesso_mostra_badge_normal(cli
     assert "0 de 1 conferidas" in resposta.text
     assert "análise falhou" not in resposta.text
     assert f'href="/processos/{processo_id}/checklist"' in resposta.text
+
+
+# ---------- Fase 4, Camada 0: cadastro de empresas fornecedoras ----------
+
+
+def _dados_empresa_ficticia_form() -> dict:
+    # Mesmo dado fictício de tests/test_db.py, em formato de campos de
+    # formulário (dict de string -> string, como um POST de verdade envia)
+    # -- valores None não fazem sentido aqui, um form só manda o que foi
+    # preenchido; campo vazio vira string vazia, não ausente.
+    return {
+        "razao_social": "Exemplo Fornecedora de Materiais Ltda",
+        "nome_fantasia": "Exemplo Fornecedora",
+        "cnpj": "12.345.678/0001-90",
+        "endereco": "Rua Fictícia, 100 - Centro - Exemplópolis/SP - CEP 00000-000",
+        "representante_legal_nome": "José da Silva Fictício",
+        "representante_legal_cpf": "000.000.000-00",
+        "representante_legal_cargo": "Sócio-administrador",
+        "telefone": "(11) 0000-0000",
+        "email": "contato@exemplofornecedora.com.br",
+        "regime_tributario": "EPP",
+    }
+
+
+def test_lista_empresas_vazia_mostra_convite(cliente_teste):
+    resposta = cliente_teste.get("/empresas")
+
+    assert resposta.status_code == 200
+    assert "Nenhuma empresa cadastrada ainda" in resposta.text
+    assert 'href="/empresas/nova"' in resposta.text
+
+
+def test_formulario_nova_empresa_devolve_html_200(cliente_teste):
+    resposta = cliente_teste.get("/empresas/nova")
+
+    assert resposta.status_code == 200
+    assert "<form" in resposta.text
+    assert 'name="razao_social"' in resposta.text
+    assert 'name="cnpj"' in resposta.text
+
+
+def test_criar_empresa_via_formulario_redireciona_e_aparece_na_lista(cliente_teste):
+    resposta = cliente_teste.post(
+        "/empresas/nova", data=_dados_empresa_ficticia_form(), follow_redirects=False
+    )
+
+    assert resposta.status_code == 303
+    assert resposta.headers["location"] == "/empresas"
+
+    resposta_lista = cliente_teste.get("/empresas")
+    assert "Exemplo Fornecedora de Materiais Ltda" in resposta_lista.text
+    assert "12.345.678/0001-90" in resposta_lista.text
+    assert "Nenhuma empresa cadastrada ainda" not in resposta_lista.text
+
+
+def test_formulario_editar_empresa_vem_preenchido(cliente_teste):
+    empresa_id = criar_empresa(_dados_empresa_ficticia_form(), caminho_banco=cliente_teste.caminho_db)
+
+    resposta = cliente_teste.get(f"/empresas/{empresa_id}/editar")
+
+    assert resposta.status_code == 200
+    assert 'value="Exemplo Fornecedora de Materiais Ltda"' in resposta.text
+    assert 'value="12.345.678/0001-90"' in resposta.text
+    assert f'action="/empresas/{empresa_id}/editar"' in resposta.text
+
+
+def test_editar_empresa_inexistente_devolve_404_com_pagina_html(cliente_teste):
+    resposta = cliente_teste.get("/empresas/999999/editar")
+
+    assert resposta.status_code == 404
+    assert "text/html" in resposta.headers["content-type"]
+
+
+def test_editar_empresa_via_formulario_atualiza_e_reflete_na_lista(cliente_teste):
+    empresa_id = criar_empresa(_dados_empresa_ficticia_form(), caminho_banco=cliente_teste.caminho_db)
+
+    dados_atualizados = {**_dados_empresa_ficticia_form(), "razao_social": "Nome Novo Fictício Ltda"}
+    resposta = cliente_teste.post(
+        f"/empresas/{empresa_id}/editar", data=dados_atualizados, follow_redirects=False
+    )
+
+    assert resposta.status_code == 303
+    assert resposta.headers["location"] == "/empresas"
+
+    resposta_lista = cliente_teste.get("/empresas")
+    assert "Nome Novo Fictício Ltda" in resposta_lista.text
+    assert "Exemplo Fornecedora de Materiais Ltda" not in resposta_lista.text
 
 
 def test_get_processos_continua_somente_json_sem_ramificacao_html(cliente_teste):

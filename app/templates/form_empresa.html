@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block titulo %}{% if empresa %}Editar empresa{% else %}Nova empresa{% endif %} — NexLicit Engine{% endblock %}
+{% block conteudo %}
+
+<span class="eyebrow">{% if empresa %}Editar empresa{% else %}Nova empresa{% endif %}</span>
+<h1>{% if empresa %}{{ empresa.razao_social }}{% else %}Cadastrar empresa fornecedora{% endif %}</h1>
+<p class="lead">Dados usados pra preencher declarações e outros documentos gerados automaticamente — quanto mais completo, menos você precisa completar à mão depois.</p>
+
+<form class="formulario" method="post" action="{% if empresa %}/empresas/{{ empresa.id }}/editar{% else %}/empresas/nova{% endif %}">
+  <label>Razão social *
+    <input type="text" name="razao_social" required autofocus value="{{ empresa.razao_social if empresa else '' }}">
+  </label>
+
+  <div class="form-row">
+    <label>Nome fantasia
+      <input type="text" name="nome_fantasia" value="{{ empresa.nome_fantasia if empresa else '' }}">
+    </label>
+    <label>CNPJ *
+      <input type="text" name="cnpj" required placeholder="00.000.000/0000-00" value="{{ empresa.cnpj if empresa else '' }}">
+    </label>
+  </div>
+
+  <label>Endereço
+    <input type="text" name="endereco" value="{{ empresa.endereco if empresa else '' }}">
+  </label>
+
+  <div class="form-row">
+    <label>Regime tributário
+      <input type="text" name="regime_tributario" placeholder="ex.: ME, EPP, Normal" value="{{ empresa.regime_tributario if empresa else '' }}">
+    </label>
+    <label>Telefone
+      <input type="text" name="telefone" value="{{ empresa.telefone if empresa else '' }}">
+    </label>
+  </div>
+
+  <label>E-mail
+    <input type="text" name="email" value="{{ empresa.email if empresa else '' }}">
+  </label>
+
+  <div class="form-row">
+    <label>Representante legal — nome
+      <input type="text" name="representante_legal_nome" value="{{ empresa.representante_legal_nome if empresa else '' }}">
+    </label>
+    <label>Representante legal — cargo
+      <input type="text" name="representante_legal_cargo" placeholder="ex.: Sócio-administrador" value="{{ empresa.representante_legal_cargo if empresa else '' }}">
+    </label>
+  </div>
+
+  <label>Representante legal — CPF
+    <input type="text" name="representante_legal_cpf" placeholder="000.000.000-00" value="{{ empresa.representante_legal_cpf if empresa else '' }}">
+  </label>
+
+  <button type="submit" class="btn btn-primary">{% if empresa %}Salvar alterações{% else %}Cadastrar empresa{% endif %}</button>
+</form>
+
+{% endblock %}

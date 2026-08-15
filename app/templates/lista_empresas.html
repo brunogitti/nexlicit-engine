@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block titulo %}Empresas — NexLicit Engine{% endblock %}
+{% block conteudo %}
+
+<div class="cabecalho-lista">
+  <h1 style="margin:0;">Empresas</h1>
+  <a class="btn btn-primary" href="/empresas/nova">+ Nova empresa</a>
+</div>
+
+{% if empresas %}
+<div class="lista-processos">
+  {% for e in empresas %}
+  <a class="card-processo" href="/empresas/{{ e.id }}/editar">
+    <div class="card-processo-cabecalho">
+      <h2>{{ e.razao_social }}</h2>
+    </div>
+    <p class="card-processo-meta mono">
+      {{ e.cnpj }}
+      {%- if e.nome_fantasia %} · {{ e.nome_fantasia }}{% endif -%}
+      {%- if e.regime_tributario %} · {{ e.regime_tributario }}{% endif -%}
+    </p>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="estado-vazio">
+  <span class="eyebrow">Nenhuma empresa ainda</span>
+  <h2>Nenhuma empresa cadastrada ainda</h2>
+  <p class="lead" style="margin:0 auto 22px;">Cadastre uma empresa fornecedora pra usar na geração de declarações e outros documentos.</p>
+  <a class="btn btn-primary" href="/empresas/nova">Cadastrar primeira empresa</a>
+</div>
+{% endif %}
+
+{% endblock %}

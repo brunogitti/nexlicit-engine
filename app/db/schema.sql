@@ -149,3 +149,41 @@ CREATE TABLE IF NOT EXISTS inconsistencia (
     trecho_tr TEXT NOT NULL,
     pagina_tr INTEGER
 );
+
+-- Fase 4, Camada 0: cadastro de empresas fornecedoras — quem vai assinar
+-- os documentos gerados (Camada 1 em diante: declarações, depois minuta
+-- de proposta, planilha de preço, recurso administrativo). Suporta
+-- múltiplas empresas (o Bruno atende clientes diferentes); a escolha de
+-- qual empresa entra em cada documento acontece na hora de gerar, não
+-- aqui.
+--
+-- Só "razao_social" e "cnpj" são NOT NULL: são o mínimo pra identificar
+-- a empresa de verdade (mesmo princípio de "processo.nome" ser o único
+-- campo obrigatório lá). O resto fica opcional na entrada — a geração de
+-- documento (Camada 1) que vai exigir o que precisar na hora de montar
+-- cada declaração, não o cadastro.
+--
+-- "endereco" é um campo de texto único, não separado em rua/número/
+-- cidade/etc: as declarações do próprio edital fictício (Anexo II) só
+-- citam razão social e CNPJ, nunca o endereço linha a linha — não haveria
+-- o que reaproveitar de campos separados que justifique a complexidade
+-- a mais.
+--
+-- "regime_tributario" é texto livre (sem CHECK como confianca/tipo/etc.):
+-- ME/EPP/Normal são exemplos, não uma lista fechada de verdade (existe
+-- também MEI, Simples Nacional, Lucro Presumido...) — travar isso agora
+-- arriscaria bloquear cadastro de empresa real mais adiante.
+CREATE TABLE IF NOT EXISTS empresa (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    razao_social TEXT NOT NULL,
+    nome_fantasia TEXT,
+    cnpj TEXT NOT NULL,
+    endereco TEXT,
+    representante_legal_nome TEXT,
+    representante_legal_cpf TEXT,
+    representante_legal_cargo TEXT,
+    telefone TEXT,
+    email TEXT,
+    regime_tributario TEXT,
+    criado_em TEXT NOT NULL
+);

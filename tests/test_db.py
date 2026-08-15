@@ -539,3 +539,90 @@ def test_processo_recem_criado_tem_checklist_verificado_em_nulo(caminho_db):
     processo = obter_processo(processo_id, caminho_banco=caminho_db)
     assert processo["checklist_verificado_em"] is None
     assert processo["checklist_sucesso"] is None
+
+
+# ---------- Fase 4, Camada 0: cadastro de empresas fornecedoras ----------
+
+
+def _empresa_ficticia() -> dict:
+    # Dados inteiramente fictícios, mesmo princípio do edital fictício de
+    # demo (demo/edital_ficticio/) — nunca dado real de cliente num teste.
+    return {
+        "razao_social": "Exemplo Fornecedora de Materiais Ltda",
+        "nome_fantasia": "Exemplo Fornecedora",
+        "cnpj": "12.345.678/0001-90",
+        "endereco": "Rua Fictícia, 100 - Centro - Exemplópolis/SP - CEP 00000-000",
+        "representante_legal_nome": "José da Silva Fictício",
+        "representante_legal_cpf": "000.000.000-00",
+        "representante_legal_cargo": "Sócio-administrador",
+        "telefone": "(11) 0000-0000",
+        "email": "contato@exemplofornecedora.com.br",
+        "regime_tributario": "EPP",
+    }
+
+
+def test_criar_empresa_persiste_todos_os_campos(caminho_db):
+    from app.db.repositorio import criar_empresa, obter_empresa
+
+    empresa_id = criar_empresa(_empresa_ficticia(), caminho_banco=caminho_db)
+
+    empresa = obter_empresa(empresa_id, caminho_banco=caminho_db)
+    assert empresa is not None
+    for campo, valor in _empresa_ficticia().items():
+        assert empresa[campo] == valor
+    assert empresa["criado_em"] is not None
+
+
+def test_criar_empresa_sem_razao_social_da_erro_claro(caminho_db):
+    from app.db.repositorio import criar_empresa
+
+    dados = _empresa_ficticia()
+    del dados["razao_social"]
+
+    with pytest.raises(sqlite3.IntegrityError):
+        criar_empresa(dados, caminho_banco=caminho_db)
+
+
+def test_criar_empresa_sem_cnpj_da_erro_claro(caminho_db):
+    from app.db.repositorio import criar_empresa
+
+    dados = _empresa_ficticia()
+    del dados["cnpj"]
+
+    with pytest.raises(sqlite3.IntegrityError):
+        criar_empresa(dados, caminho_banco=caminho_db)
+
+
+def test_obter_empresa_inexistente_devolve_none(caminho_db):
+    from app.db.repositorio import obter_empresa
+
+    assert obter_empresa(999, caminho_banco=caminho_db) is None
+
+
+def test_listar_empresas_ordena_por_razao_social(caminho_db):
+    from app.db.repositorio import criar_empresa, listar_empresas
+
+    criar_empresa({**_empresa_ficticia(), "razao_social": "Zeta Fornecedora"}, caminho_banco=caminho_db)
+    criar_empresa({**_empresa_ficticia(), "razao_social": "Alfa Fornecedora"}, caminho_banco=caminho_db)
+
+    empresas = listar_empresas(caminho_banco=caminho_db)
+    assert [e["razao_social"] for e in empresas] == ["Alfa Fornecedora", "Zeta Fornecedora"]
+
+
+def test_atualizar_empresa_sobrescreve_campos(caminho_db):
+    from app.db.repositorio import atualizar_empresa, criar_empresa
+
+    empresa_id = criar_empresa(_empresa_ficticia(), caminho_banco=caminho_db)
+
+    dados_novos = {**_empresa_ficticia(), "razao_social": "Nome Novo Ltda", "telefone": None}
+    atualizada = atualizar_empresa(empresa_id, dados_novos, caminho_banco=caminho_db)
+
+    assert atualizada["razao_social"] == "Nome Novo Ltda"
+    assert atualizada["telefone"] is None  # campo ausente vira NULL, é reescrita completa
+
+
+def test_atualizar_empresa_inexistente_da_erro_claro(caminho_db):
+    from app.db.repositorio import RegistroNaoEncontradoError, atualizar_empresa
+
+    with pytest.raises(RegistroNaoEncontradoError):
+        atualizar_empresa(999, _empresa_ficticia(), caminho_banco=caminho_db)

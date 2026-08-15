@@ -29,6 +29,12 @@
 #   ModoDemoEstaticoError       -> 403  rota de escrita bloqueada porque o
 #                                        modo estático do demo público está
 #                                        ativo (Fase 3, app/demo_estatico.py)
+#   SemDeclaracoesError         -> 400  processo não tem exigência de
+#                                        "declaracoes_exigidas" no checklist
+#                                        (Fase 4, geração de documento)
+#   EmpresaSemRepresentanteError -> 400 empresa selecionada não tem
+#                                        representante legal cadastrado
+#                                        (Fase 4, geração de documento)
 #
 # Todo tratador loga a exceção com traceback (logging, nível ERROR) antes de
 # montar a resposta — mesmo os 400/404/409 "esperados". Assim o terminal do
@@ -43,6 +49,7 @@ from fastapi.responses import JSONResponse
 
 from app.db.repositorio import RegistroNaoEncontradoError
 from app.demo_estatico import ModoDemoEstaticoError
+from app.geracao.declaracoes import EmpresaSemRepresentanteError, SemDeclaracoesError
 from app.ia.llm_client import (
     ConfiguracaoAusenteError,
     ContextoGrandeDemaisError,
@@ -156,3 +163,15 @@ def registrar_tratadores_de_erro(app: FastAPI) -> None:
         requisicao: Request, erro: ModoDemoEstaticoError
     ) -> JSONResponse:
         return _resposta_erro(403, str(erro), requisicao, erro)
+
+    @app.exception_handler(SemDeclaracoesError)
+    async def _tratar_sem_declaracoes(
+        requisicao: Request, erro: SemDeclaracoesError
+    ) -> JSONResponse:
+        return _resposta_erro(400, str(erro), requisicao, erro)
+
+    @app.exception_handler(EmpresaSemRepresentanteError)
+    async def _tratar_empresa_sem_representante(
+        requisicao: Request, erro: EmpresaSemRepresentanteError
+    ) -> JSONResponse:
+        return _resposta_erro(400, str(erro), requisicao, erro)

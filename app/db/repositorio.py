@@ -600,3 +600,92 @@ def atualizar_status_exigencia(
         raise
     finally:
         conexao.close()
+
+
+# ---------- Fase 4, Camada 0: cadastro de empresas fornecedoras ----------
+
+
+_CAMPOS_EMPRESA = (
+    "razao_social", "nome_fantasia", "cnpj", "endereco",
+    "representante_legal_nome", "representante_legal_cpf", "representante_legal_cargo",
+    "telefone", "email", "regime_tributario",
+)
+
+
+def criar_empresa(dados: dict[str, Any], caminho_banco: str | None = None) -> int:
+    """Cadastra uma empresa fornecedora. `dados` precisa ter "razao_social"
+    e "cnpj"; os demais campos de _CAMPOS_EMPRESA são opcionais e viram
+    NULL se ausentes. Devolve o id criado."""
+    conexao = obter_conexao(caminho_banco)
+    try:
+        cursor = conexao.execute(
+            f"""
+            INSERT INTO empresa ({", ".join(_CAMPOS_EMPRESA)}, criado_em)
+            VALUES ({", ".join(f":{campo}" for campo in _CAMPOS_EMPRESA)}, :criado_em)
+            """,
+            {**{campo: dados.get(campo) for campo in _CAMPOS_EMPRESA}, "criado_em": _agora_iso()},
+        )
+        # "razao_social" e "cnpj" são NOT NULL no schema — se vierem
+        # ausentes de `dados`, o INSERT falha com sqlite3.IntegrityError
+        # (já tratado por app/erros.py -> 400), não silenciosamente como
+        # NULL. dados.get() aqui não esconde isso: só evita KeyError pros
+        # campos opcionais.
+        conexao.commit()
+        assert cursor.lastrowid is not None
+        return cursor.lastrowid
+    except Exception:
+        conexao.rollback()
+        raise
+    finally:
+        conexao.close()
+
+
+def obter_empresa(id: int, caminho_banco: str | None = None) -> dict[str, Any] | None:
+    """Devolve a empresa com esse id, ou None se não existir."""
+    conexao = obter_conexao(caminho_banco)
+    try:
+        linha = conexao.execute("SELECT * FROM empresa WHERE id = ?", (id,)).fetchone()
+        return dict(linha) if linha is not None else None
+    finally:
+        conexao.close()
+
+
+def listar_empresas(caminho_banco: str | None = None) -> list[dict[str, Any]]:
+    """Todas as empresas cadastradas, ordenadas por razão social — lista de
+    seleção pequena (o Bruno atende um punhado de clientes, não centenas),
+    ordem alfabética é mais fácil de escanear que "mais recente primeiro"
+    (que faz sentido pra processo, não faz muito aqui)."""
+    conexao = obter_conexao(caminho_banco)
+    try:
+        linhas = conexao.execute("SELECT * FROM empresa ORDER BY razao_social").fetchall()
+        return [dict(linha) for linha in linhas]
+    finally:
+        conexao.close()
+
+
+def atualizar_empresa(id: int, dados: dict[str, Any], caminho_banco: str | None = None) -> dict[str, Any]:
+    """Atualiza os campos de uma empresa já cadastrada (tela de edição) e
+    devolve o registro atualizado. Sobrescreve TODOS os campos de
+    _CAMPOS_EMPRESA com o que vier em `dados` (mesmo os ausentes viram
+    NULL) — é uma reescrita completa do formulário, não uma atualização
+    parcial tipo PATCH de exigencia.status_check.
+
+    Levanta RegistroNaoEncontradoError se o id não existir."""
+    conexao = obter_conexao(caminho_banco)
+    try:
+        atribuicoes = ", ".join(f"{campo} = :{campo}" for campo in _CAMPOS_EMPRESA)
+        cursor = conexao.execute(
+            f"UPDATE empresa SET {atribuicoes} WHERE id = :id",
+            {**{campo: dados.get(campo) for campo in _CAMPOS_EMPRESA}, "id": id},
+        )
+        if cursor.rowcount == 0:
+            raise RegistroNaoEncontradoError(f"empresa {id} não existe")
+
+        linha = conexao.execute("SELECT * FROM empresa WHERE id = ?", (id,)).fetchone()
+        conexao.commit()
+        return dict(linha)
+    except Exception:
+        conexao.rollback()
+        raise
+    finally:
+        conexao.close()
