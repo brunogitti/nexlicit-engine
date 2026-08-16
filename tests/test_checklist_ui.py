@@ -36,6 +36,11 @@ def _porta_livre() -> int:
 def servidor(tmp_path, monkeypatch):
     caminho_db = str(tmp_path / "teste.db")
     monkeypatch.setattr("app.db.conexao.DATABASE_PATH", caminho_db)
+    # Servidor real dispara o lifespan do FastAPI de verdade (a limpeza
+    # automática de processos antigos, 16/08/2026) -- sem isolar o log de
+    # auditoria também, cada rodada da suíte escreveria no
+    # logs/limpeza_automatica.log de verdade.
+    monkeypatch.setattr("app.limpeza.CAMINHO_LOG_AUDITORIA", str(tmp_path / "limpeza.log"))
 
     from app.main import app
 
@@ -135,6 +140,7 @@ def test_clicar_checkbox_avulso_persiste_apos_recarregar(servidor, navegador):
         pagina.close()
 
     processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo is not None
     assert processo["exigencias"][0]["status_check"] == "ok"
 
 
@@ -160,6 +166,7 @@ def test_clicar_checkbox_de_grupo_persiste_todas_as_hipoteses(servidor, navegado
         pagina.close()
 
     processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo is not None
     # AS DUAS hipóteses do grupo precisam ter sido salvas, não só uma --
     # é exatamente esse "várias linhas por um clique só" que o bug
     # original quebrava.

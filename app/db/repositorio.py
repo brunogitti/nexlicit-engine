@@ -557,6 +557,45 @@ def listar_processos(caminho_banco: str | None = None) -> list[dict[str, Any]]:
         conexao.close()
 
 
+def excluir_processo(processo_id: int, caminho_banco: str | None = None) -> None:
+    """Remove um processo e TODAS as linhas relacionadas — exclusão
+    definitiva (diferente de limpar_analise_do_processo, que só limpa a
+    análise pra reprocessar, mantendo o processo em si).
+
+    Usada pela limpeza de processos antigos (app/limpeza.py, 16/08/2026).
+
+    A ordem do DELETE importa: nenhuma FK do schema.sql tem ON DELETE
+    CASCADE (só REFERENCES simples) e PRAGMA foreign_keys=ON está ativo em
+    toda conexão (app/db/conexao.py) — por isso cada tabela filha precisa
+    ser esvaziada manualmente antes do DELETE do processo, na ordem certa:
+    texto_pagina e exigencia referenciam tanto processo_id quanto
+    arquivo_id/arquivo_origem_id, então saem antes de arquivo; requisito_item
+    também referencia arquivo_origem_id (nullable, mas a ordem não custa
+    nada de qualquer forma); inconsistencia só referencia processo_id.
+    Só depois de todas essas é seguro apagar "arquivo", e só depois de
+    "arquivo" é seguro apagar o "processo".
+
+    NÃO toca a tabela "empresa" de forma nenhuma — não existe FK de
+    processo para empresa no schema (cadastro de fornecedor é
+    independente por natureza), então não há cascade acidental possível
+    aqui, nem por engano futuro: esta função nunca referencia "empresa".
+    """
+    conexao = obter_conexao(caminho_banco)
+    try:
+        conexao.execute("DELETE FROM texto_pagina WHERE processo_id = ?", (processo_id,))
+        conexao.execute("DELETE FROM exigencia WHERE processo_id = ?", (processo_id,))
+        conexao.execute("DELETE FROM requisito_item WHERE processo_id = ?", (processo_id,))
+        conexao.execute("DELETE FROM inconsistencia WHERE processo_id = ?", (processo_id,))
+        conexao.execute("DELETE FROM arquivo WHERE processo_id = ?", (processo_id,))
+        conexao.execute("DELETE FROM processo WHERE id = ?", (processo_id,))
+        conexao.commit()
+    except Exception:
+        conexao.rollback()
+        raise
+    finally:
+        conexao.close()
+
+
 def atualizar_status_exigencia(
     id: int,
     novo_status: str,

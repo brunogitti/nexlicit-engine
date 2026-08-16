@@ -39,6 +39,11 @@ def _porta_livre() -> int:
 def servidor(tmp_path, monkeypatch):
     caminho_db = str(tmp_path / "teste.db")
     monkeypatch.setattr("app.db.conexao.DATABASE_PATH", caminho_db)
+    # Servidor real dispara o lifespan do FastAPI de verdade (a limpeza
+    # automática de processos antigos, 16/08/2026) -- sem isolar o log de
+    # auditoria também, cada rodada da suíte escreveria no
+    # logs/limpeza_automatica.log de verdade.
+    monkeypatch.setattr("app.limpeza.CAMINHO_LOG_AUDITORIA", str(tmp_path / "limpeza.log"))
 
     from app.main import app
 

@@ -14,6 +14,11 @@
 # Arquivos enviados pelos usuários pela própria aplicação.
 uploads/
 
+# Log de auditoria da limpeza automática de processos antigos (16/08/2026,
+# app/limpeza.py) -- registra nome/órgão de processo real removido, mesmo
+# motivo de uploads/ e *.db ficarem fora do Git.
+logs/
+
 # Pasta de convenção para guardar editais reais fora da pasta uploads/,
 # por exemplo durante testes manuais. Nunca deve ir pro Git.
 editais-reais/

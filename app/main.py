@@ -4,11 +4,13 @@
 # não aqui.
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.erros import registrar_tratadores_de_erro
+from app.limpeza import executar_limpeza_com_auditoria
 from app.rotas import documentos, exigencias, inconsistencias, paginas, perguntas, processos
 
 # Configuração simples do logging padrão do Python (nada de biblioteca
@@ -23,7 +25,26 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
-app = FastAPI(title="NexLicit Engine")
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _ciclo_de_vida(_app: FastAPI):
+    # Limpeza de processos antigos (16/08/2026): roda uma vez a cada
+    # subida do servidor, não em cada requisição. Envolta em try/except
+    # de propósito — um bug na rotina de limpeza não pode derrubar o
+    # servidor inteiro (ela é manutenção de fundo, não uma dependência
+    # crítica pra a aplicação funcionar), mas o erro NUNCA fica
+    # silencioso: vai pro log padrão (console) sempre, e tenta ir pro log
+    # de auditoria também, pra não sumir sem rastro nenhum.
+    try:
+        executar_limpeza_com_auditoria()
+    except Exception:
+        logger.exception("falha ao rodar a limpeza automática de processos antigos no startup")
+    yield
+
+
+app = FastAPI(title="NexLicit Engine", lifespan=_ciclo_de_vida)
 
 registrar_tratadores_de_erro(app)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
