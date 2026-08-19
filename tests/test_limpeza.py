@@ -21,8 +21,10 @@ from app.db.repositorio import (
     criar_processo,
     listar_empresas,
     obter_processo,
+    salvar_catalogo_itens,
     salvar_exigencias,
     salvar_inconsistencias,
+    salvar_preco_item,
     salvar_requisitos_item,
     salvar_texto_paginas,
 )
@@ -65,9 +67,9 @@ def _processo_completo(
     orgao: str = "Órgão de teste",
 ) -> int:
     """Cria um processo com uma linha em CADA tabela filha (arquivo,
-    texto_pagina, exigencia, requisito_item, inconsistencia) e um arquivo
-    físico em uploads/{id}/ -- pra testar cascade e limpeza de disco de
-    verdade, não só a tabela "processo" isolada."""
+    texto_pagina, exigencia, requisito_item, inconsistencia, item_catalogo,
+    preco_item) e um arquivo físico em uploads/{id}/ -- pra testar cascade
+    e limpeza de disco de verdade, não só a tabela "processo" isolada."""
     processo_id = criar_processo({"nome": nome, "orgao": orgao}, caminho_banco=caminho_db)
     _definir_criado_em(processo_id, dias_atras, caminho_db)
 
@@ -103,6 +105,12 @@ def _processo_completo(
         }],
         caminho_banco=caminho_db,
     )
+    salvar_catalogo_itens(
+        processo_id,
+        [{"numero": 1, "texto_bruto": "1 Item de teste UND 10", "pagina": 1, "localizador": "página 1"}],
+        caminho_banco=caminho_db,
+    )
+    salvar_preco_item(processo_id, 1, quantidade=10, preco_unitario=5.5, caminho_banco=caminho_db)
 
     pasta_processo = pasta_uploads / str(processo_id)
     pasta_processo.mkdir()
@@ -153,7 +161,10 @@ def test_cascade_nao_deixa_linha_orfa_em_nenhuma_tabela_filha(caminho_db, pasta_
 
     executar_limpeza_de_processos_antigos(caminho_banco=caminho_db, upload_dir=str(pasta_uploads))
 
-    for tabela in ("arquivo", "texto_pagina", "exigencia", "requisito_item", "inconsistencia"):
+    for tabela in (
+        "arquivo", "texto_pagina", "exigencia", "requisito_item", "inconsistencia",
+        "item_catalogo", "preco_item",
+    ):
         assert _contar_linhas(tabela, processo_id, caminho_db) == 0, (
             f"tabela {tabela} ficou com linha órfã do processo {processo_id} excluído"
         )

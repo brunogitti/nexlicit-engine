@@ -35,6 +35,11 @@
 #   EmpresaSemRepresentanteError -> 400 empresa selecionada não tem
 #                                        representante legal cadastrado
 #                                        (Fase 4, geração de documento)
+#   SemCatalogoError             -> 400  processo não tem catálogo de itens
+#                                        salvo (nunca reprocessado depois da
+#                                        funcionalidade existir, ou edital
+#                                        sem tabela de itens reconhecível)
+#                                        (Fase 4, planilha de preço)
 #
 # Todo tratador loga a exceção com traceback (logging, nível ERROR) antes de
 # montar a resposta — mesmo os 400/404/409 "esperados". Assim o terminal do
@@ -50,6 +55,7 @@ from fastapi.responses import JSONResponse
 from app.db.repositorio import RegistroNaoEncontradoError
 from app.demo_estatico import ModoDemoEstaticoError
 from app.geracao.declaracoes import EmpresaSemRepresentanteError, SemDeclaracoesError
+from app.geracao.planilha_preco import SemCatalogoError
 from app.ia.llm_client import (
     ConfiguracaoAusenteError,
     ContextoGrandeDemaisError,
@@ -173,5 +179,11 @@ def registrar_tratadores_de_erro(app: FastAPI) -> None:
     @app.exception_handler(EmpresaSemRepresentanteError)
     async def _tratar_empresa_sem_representante(
         requisicao: Request, erro: EmpresaSemRepresentanteError
+    ) -> JSONResponse:
+        return _resposta_erro(400, str(erro), requisicao, erro)
+
+    @app.exception_handler(SemCatalogoError)
+    async def _tratar_sem_catalogo(
+        requisicao: Request, erro: SemCatalogoError
     ) -> JSONResponse:
         return _resposta_erro(400, str(erro), requisicao, erro)

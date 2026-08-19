@@ -315,16 +315,141 @@ def salvar_requisitos_item(
         conexao.close()
 
 
+# ---------- Fase 4, Camada 1: planilha de preço ----------
+#
+# Duas tabelas com dono diferente: item_catalogo é dado DERIVADO (o
+# pipeline gera de novo a cada reprocessamento, mesmo texto bruto que já
+# existia antes); preco_item é dado DIGITADO por gente (nunca gerado,
+# nunca reescrito por reprocessamento — ver limpar_analise_do_processo
+# logo abaixo, que limpa um e preserva o outro de propósito).
+
+
+def salvar_catalogo_itens(
+    processo_id: int,
+    lista_itens: list[dict[str, Any]],
+    caminho_banco: str | None = None,
+) -> list[int]:
+    """Grava em lote o catálogo mínimo de itens (numero + texto_bruto),
+    numa transação só — se um falhar, nenhum é salvo. Cada item precisa
+    ter "numero" e "texto_bruto"; "pagina" e "localizador" são opcionais.
+
+    Devolve a lista de ids criados, na mesma ordem de entrada.
+    """
+    conexao = obter_conexao(caminho_banco)
+    try:
+        ids_criados: list[int] = []
+        for item in lista_itens:
+            cursor = conexao.execute(
+                """
+                INSERT INTO item_catalogo (processo_id, numero, texto_bruto, pagina, localizador)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    processo_id,
+                    item["numero"],
+                    item["texto_bruto"],
+                    item.get("pagina"),
+                    item.get("localizador"),
+                ),
+            )
+            assert cursor.lastrowid is not None
+            ids_criados.append(cursor.lastrowid)
+
+        conexao.commit()
+        return ids_criados
+    except Exception:
+        conexao.rollback()
+        raise
+    finally:
+        conexao.close()
+
+
+def obter_catalogo_itens(processo_id: int, caminho_banco: str | None = None) -> list[dict[str, Any]]:
+    """Catálogo de itens de um processo, em ordem de número — lista vazia
+    se o processo não tiver catálogo (nunca foi (re)processado depois
+    desta funcionalidade existir)."""
+    conexao = obter_conexao(caminho_banco)
+    try:
+        linhas = conexao.execute(
+            "SELECT * FROM item_catalogo WHERE processo_id = ? ORDER BY numero", (processo_id,)
+        ).fetchall()
+        return [dict(linha) for linha in linhas]
+    finally:
+        conexao.close()
+
+
+def salvar_preco_item(
+    processo_id: int,
+    numero_item: int,
+    quantidade: float | None,
+    preco_unitario: float | None,
+    caminho_banco: str | None = None,
+) -> dict[str, Any]:
+    """Salva quantidade/preço de UM item — cria a linha se é a primeira
+    vez que esse item recebe algum valor, atualiza se já existia (upsert
+    via ON CONFLICT, chave é UNIQUE(processo_id, numero_item) do schema).
+    Mesmo princípio de salvar ao sair do campo (blur) que checklist.js já
+    usa pra observação — quem chama não precisa saber se a linha já
+    existe. Devolve a linha já salva."""
+    conexao = obter_conexao(caminho_banco)
+    try:
+        conexao.execute(
+            """
+            INSERT INTO preco_item (processo_id, numero_item, quantidade, preco_unitario)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (processo_id, numero_item)
+            DO UPDATE SET quantidade = excluded.quantidade, preco_unitario = excluded.preco_unitario
+            """,
+            (processo_id, numero_item, quantidade, preco_unitario),
+        )
+        linha = conexao.execute(
+            "SELECT * FROM preco_item WHERE processo_id = ? AND numero_item = ?",
+            (processo_id, numero_item),
+        ).fetchone()
+        conexao.commit()
+        return dict(linha)
+    except Exception:
+        conexao.rollback()
+        raise
+    finally:
+        conexao.close()
+
+
+def obter_precos_item(processo_id: int, caminho_banco: str | None = None) -> dict[int, dict[str, Any]]:
+    """Preços já digitados de um processo, indexados por numero_item —
+    dict vazio se nenhum preço foi digitado ainda. Índice por numero_item
+    (não lista) porque quem usa isso (montar a tela do formulário, gerar
+    a planilha) sempre precisa cruzar contra o catálogo item a item."""
+    conexao = obter_conexao(caminho_banco)
+    try:
+        linhas = conexao.execute(
+            "SELECT * FROM preco_item WHERE processo_id = ?", (processo_id,)
+        ).fetchall()
+        return {linha["numero_item"]: dict(linha) for linha in linhas}
+    finally:
+        conexao.close()
+
+
 def limpar_analise_do_processo(processo_id: int, caminho_banco: str | None = None) -> None:
-    """Remove todas as exigências, requisitos por item, texto por página e
-    arquivos de um processo (não o processo em si) — usado pelo pipeline
-    (Passo 6) para reprocessar do zero. A ordem importa: exigencia,
-    requisito_item e texto_pagina têm FK para arquivo, então precisam ser
-    removidas primeiro (senão a FK bloqueia o DELETE do arquivo)."""
+    """Remove todas as exigências, requisitos por item, catálogo de itens,
+    texto por página e arquivos de um processo (não o processo em si) —
+    usado pelo pipeline (Passo 6) para reprocessar do zero. A ordem
+    importa: exigencia, requisito_item e texto_pagina têm FK para
+    arquivo, então precisam ser removidas primeiro (senão a FK bloqueia o
+    DELETE do arquivo).
+
+    NÃO apaga "preco_item" de propósito: preço é dado digitado por gente,
+    não gerado pelo pipeline — reprocessar o edital (ex.: depois de trocar
+    o prompt da IA) não deveria apagar um trabalho manual que não tem
+    nenhuma relação com o que mudou. Se a numeração dos itens mudar entre
+    duas análises do mesmo processo (raro, mas possível), o preço antigo
+    fica "orfão" por número — aceitável, mais seguro que apagar sem
+    perguntar."""
     conexao = obter_conexao(caminho_banco)
     try:
         conexao.execute("DELETE FROM exigencia WHERE processo_id = ?", (processo_id,))
         conexao.execute("DELETE FROM requisito_item WHERE processo_id = ?", (processo_id,))
+        conexao.execute("DELETE FROM item_catalogo WHERE processo_id = ?", (processo_id,))
         conexao.execute("DELETE FROM texto_pagina WHERE processo_id = ?", (processo_id,))
         conexao.execute("DELETE FROM arquivo WHERE processo_id = ?", (processo_id,))
         conexao.commit()
@@ -571,9 +696,15 @@ def excluir_processo(processo_id: int, caminho_banco: str | None = None) -> None
     texto_pagina e exigencia referenciam tanto processo_id quanto
     arquivo_id/arquivo_origem_id, então saem antes de arquivo; requisito_item
     também referencia arquivo_origem_id (nullable, mas a ordem não custa
-    nada de qualquer forma); inconsistencia só referencia processo_id.
-    Só depois de todas essas é seguro apagar "arquivo", e só depois de
-    "arquivo" é seguro apagar o "processo".
+    nada de qualquer forma); inconsistencia, item_catalogo e preco_item só
+    referenciam processo_id. Só depois de todas essas é seguro apagar
+    "arquivo", e só depois de "arquivo" é seguro apagar o "processo".
+
+    Diferente de limpar_analise_do_processo() (reprocessar), esta função
+    APAGA "preco_item" também: exclusão definitiva do processo remove
+    tudo relacionado a ele, sem exceção — a preservação de preço só faz
+    sentido pra reprocessar o MESMO processo, não pra quando o processo
+    inteiro deixa de existir.
 
     NÃO toca a tabela "empresa" de forma nenhuma — não existe FK de
     processo para empresa no schema (cadastro de fornecedor é
@@ -586,6 +717,8 @@ def excluir_processo(processo_id: int, caminho_banco: str | None = None) -> None
         conexao.execute("DELETE FROM exigencia WHERE processo_id = ?", (processo_id,))
         conexao.execute("DELETE FROM requisito_item WHERE processo_id = ?", (processo_id,))
         conexao.execute("DELETE FROM inconsistencia WHERE processo_id = ?", (processo_id,))
+        conexao.execute("DELETE FROM item_catalogo WHERE processo_id = ?", (processo_id,))
+        conexao.execute("DELETE FROM preco_item WHERE processo_id = ?", (processo_id,))
         conexao.execute("DELETE FROM arquivo WHERE processo_id = ?", (processo_id,))
         conexao.execute("DELETE FROM processo WHERE id = ?", (processo_id,))
         conexao.commit()

@@ -132,6 +132,48 @@ CREATE TABLE IF NOT EXISTS requisito_item (
     ocorrencias_encontradas INTEGER NOT NULL DEFAULT 1
 );
 
+-- Fase 4, Camada 1 (planilha de preço): catálogo mínimo de itens, gerado
+-- automaticamente pelo mesmo fatiamento determinístico do Passo 8
+-- (app/extracao/tabela_itens.py, reaproveitado -- sem IA nova). "texto_bruto"
+-- é o texto ORIGINAL não estruturado do item, exatamente como saiu da
+-- tabela do edital (número + descrição + unidade + quantidade tudo
+-- misturado, sem separação de coluna confiável -- mesmo problema já
+-- documentado no backlog do Pirangi, seção 13 do planejamento). Decisão B
+-- (16/08/2026): não tentar separar isso em colunas; guarda o texto bruto
+-- inteiro como referência de descrição, e pede quantidade digitada por
+-- gente (ver preco_item) em vez de tentar extrair um número não confiável
+-- daqui.
+--
+-- Só populado por processo NOVO ou REPROCESSADO depois desta mudança —
+-- processo já analisado antes não ganha catálogo retroativamente (mesmo
+-- princípio de checklist_verificado_em/inconsistencias_verificado_em:
+-- dado derivado só existe se o pipeline já rodou depois de existir).
+CREATE TABLE IF NOT EXISTS item_catalogo (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    processo_id INTEGER NOT NULL REFERENCES processo (id),
+    numero INTEGER NOT NULL,
+    texto_bruto TEXT NOT NULL,
+    pagina INTEGER,
+    localizador TEXT
+);
+
+-- Fase 4, Camada 1: preço digitado por gente, item a item -- nunca
+-- inventado, nunca extraído. "numero_item" (não FK pro id de
+-- item_catalogo) é de propósito o mesmo padrão já usado em
+-- requisito_item.numero_item: liga pelo NÚMERO do item do edital, não
+-- pela chave interna da linha que o guarda. UNIQUE(processo_id,
+-- numero_item) permite salvar por "upsert" (INSERT ... ON CONFLICT) --
+-- cria a linha na primeira vez que a pessoa digita algo naquele item,
+-- atualiza nas vezes seguintes, sem precisar buscar um id antes.
+CREATE TABLE IF NOT EXISTS preco_item (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    processo_id INTEGER NOT NULL REFERENCES processo (id),
+    numero_item INTEGER NOT NULL,
+    quantidade REAL,
+    preco_unitario REAL,
+    UNIQUE (processo_id, numero_item)
+);
+
 -- Fase 2 (motor de inconsistências edital-vs-TR), Camada 1: contradições
 -- reais entre o corpo do edital e o Termo de Referência (TR), encontradas
 -- pela IA a partir do limite identificado na Camada 0

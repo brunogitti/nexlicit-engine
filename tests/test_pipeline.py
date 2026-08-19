@@ -7,7 +7,7 @@ import pytest
 
 from app import pipeline
 from app.db.conexao import obter_conexao
-from app.db.repositorio import criar_processo, obter_processo
+from app.db.repositorio import criar_processo, obter_catalogo_itens, obter_processo, salvar_preco_item
 from app.inconsistencias.limite_tr import DeteccaoLimiteTR
 from app.pipeline import (
     ProcessoJaAnalisadoError,
@@ -28,6 +28,38 @@ def _criar_pdf_exemplo(caminho) -> None:
     )
     documento.save(str(caminho))
     documento.close()
+
+
+def _criar_pdf_com_tabela_itens(caminho) -> None:
+    # Cabeçalho + 2 itens sequenciais -- mesmo padrão mínimo já validado
+    # em tests/test_tabela_itens.py, só que gravado como PDF de verdade
+    # (fatiar_por_item só entra em ação depois de extrair_texto rodar
+    # sobre um arquivo real, não sobre um DocumentoExtraido montado à mão).
+    documento = fitz.open()
+    pagina = documento.new_page()
+    pagina.insert_text(
+        (72, 72),
+        "ITEM DESCRICAO DO PRODUTO UNIDADE QUANTIDADE\n"
+        "1 TERMOMETRO DIGITAL. UND 10\n"
+        "2 SERINGA DESCARTAVEL. UND 50\n",
+    )
+    documento.save(str(caminho))
+    documento.close()
+
+
+def _checklist_falso_generico(texto_completo, contexto_processo):
+    # Mesmo formato de retorno de _checklist_falso, sem a asserção presa
+    # ao texto do PDF de exemplo padrão -- usado pelos testes de catálogo
+    # de itens, que usam um PDF diferente (_criar_pdf_com_tabela_itens).
+    return [
+        {
+            "categoria": "habilitacao_fiscal_social_trabalhista",
+            "descricao": "Certidão Negativa de Débitos",
+            "base_legal": None,
+            "trecho": texto_completo[:40],
+            "obrigatorio_para": "todos",
+        }
+    ]
 
 
 def _checklist_falso(texto_completo, contexto_processo):
@@ -193,6 +225,69 @@ def test_processar_processo_com_forcar_reprocessa_sem_duplicar(
     assert len(processo["exigencias"]) == 2
 
 
+def test_processar_processo_com_tabela_de_itens_persiste_catalogo(
+    tmp_path, caminho_db, monkeypatch
+):
+    # Fase 4, Camada 1 (decisão B, 16/08/2026): catálogo mínimo reaproveita
+    # o MESMO fatiamento já usado pra requisito_item (Passo 8) -- roda no
+    # mesmo processar_processo, sem chamada de IA nenhuma.
+    caminho_pdf = tmp_path / "edital_com_tabela.pdf"
+    _criar_pdf_com_tabela_itens(caminho_pdf)
+    processo_id = criar_processo({"nome": "Processo com tabela"}, caminho_banco=caminho_db)
+    monkeypatch.setattr(pipeline, "extrair_checklist", _checklist_falso_generico)
+
+    processar_processo(processo_id, [str(caminho_pdf)], caminho_banco=caminho_db)
+
+    catalogo = obter_catalogo_itens(processo_id, caminho_banco=caminho_db)
+    assert [item["numero"] for item in catalogo] == [1, 2]
+    assert "TERMOMETRO DIGITAL" in catalogo[0]["texto_bruto"]
+    assert "SERINGA DESCARTAVEL" in catalogo[1]["texto_bruto"]
+
+
+def test_processar_processo_sem_tabela_de_itens_nao_gera_catalogo(
+    tmp_path, caminho_db, monkeypatch
+):
+    # _criar_pdf_exemplo (usado no resto do arquivo) não tem cabeçalho de
+    # tabela nenhum -- confirma que o catálogo fica vazio, não que algo
+    # quebra silenciosamente.
+    caminho_pdf = tmp_path / "edital.pdf"
+    _criar_pdf_exemplo(caminho_pdf)
+    processo_id = criar_processo({"nome": "Processo sem tabela"}, caminho_banco=caminho_db)
+    monkeypatch.setattr(pipeline, "extrair_checklist", _checklist_falso)
+
+    processar_processo(processo_id, [str(caminho_pdf)], caminho_banco=caminho_db)
+
+    assert obter_catalogo_itens(processo_id, caminho_banco=caminho_db) == []
+
+
+def test_reprocessar_regenera_catalogo_mas_preserva_preco_ja_digitado(
+    tmp_path, caminho_db, monkeypatch
+):
+    # limpar_analise_do_processo() limpa item_catalogo (dado derivado,
+    # gerado de novo) mas NUNCA preco_item (dado digitado por gente) --
+    # reprocessar (ex.: depois de trocar o prompt da IA) não pode apagar
+    # um preço que alguém já preencheu à mão.
+    caminho_pdf = tmp_path / "edital_com_tabela.pdf"
+    _criar_pdf_com_tabela_itens(caminho_pdf)
+    processo_id = criar_processo({"nome": "Processo com tabela"}, caminho_banco=caminho_db)
+    monkeypatch.setattr(pipeline, "extrair_checklist", _checklist_falso_generico)
+
+    processar_processo(processo_id, [str(caminho_pdf)], caminho_banco=caminho_db)
+    salvar_preco_item(processo_id, 1, quantidade=10, preco_unitario=25.90, caminho_banco=caminho_db)
+
+    processar_processo(
+        processo_id, [str(caminho_pdf)], forcar_reprocessamento=True, caminho_banco=caminho_db
+    )
+
+    catalogo = obter_catalogo_itens(processo_id, caminho_banco=caminho_db)
+    assert len(catalogo) == 2  # regenerado, sem duplicar
+
+    from app.db.repositorio import obter_precos_item
+    precos = obter_precos_item(processo_id, caminho_banco=caminho_db)
+    assert precos[1]["quantidade"] == 10
+    assert precos[1]["preco_unitario"] == 25.90
+
+
 def test_processar_processo_formato_nao_suportado_da_erro_claro(tmp_path, caminho_db):
     caminho_invalido = tmp_path / "arquivo.xyz"
     caminho_invalido.write_text("conteudo qualquer")
@@ -295,6 +390,7 @@ def test_detectar_inconsistencias_processo_tr_nao_identificado_nao_chama_ia(
     # Fase 2, Camada 2: status persistido em "processo", pra UI diferenciar
     # "nunca verificado" de "verificado, não possível".
     processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo is not None
     assert processo["inconsistencias_verificado_em"] is not None
     assert processo["inconsistencias_comparacao_possivel"] == 0
     assert processo["inconsistencias_motivo_impossibilidade"] == "motivo de teste: marcador não encontrado"
@@ -379,6 +475,7 @@ def test_detectar_inconsistencias_processo_encontra_e_salva(caminho_db, monkeypa
     assert linhas[0]["pagina_tr"] == 20
 
     processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo is not None
     assert processo["inconsistencias_verificado_em"] is not None
     assert processo["inconsistencias_comparacao_possivel"] == 1
     assert processo["inconsistencias_motivo_impossibilidade"] is None
@@ -447,6 +544,7 @@ def test_detectar_inconsistencias_processo_falha_da_ia_nao_atualiza_status(camin
         detectar_inconsistencias_processo(processo_id, caminho_banco=caminho_db)
 
     processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo is not None
     assert processo["inconsistencias_verificado_em"] is None
     assert processo["inconsistencias_comparacao_possivel"] is None
 
@@ -716,6 +814,7 @@ def test_processar_processo_roda_deteccao_de_inconsistencias_automaticamente(
     from app.db.repositorio import obter_inconsistencias
 
     processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo is not None
     assert processo["inconsistencias_verificado_em"] is not None
     assert processo["inconsistencias_comparacao_possivel"] == 1
     assert len(obter_inconsistencias(processo_id, caminho_banco=caminho_db)) == 1
@@ -743,5 +842,6 @@ def test_processar_processo_nao_falha_se_deteccao_de_inconsistencias_falhar(
     assert resumo["total_exigencias"] == 2
 
     processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo is not None
     assert len(processo["exigencias"]) == 2  # checklist foi salvo normalmente
     assert processo["inconsistencias_verificado_em"] is None  # detecção não completou

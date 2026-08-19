@@ -18,6 +18,7 @@ from app.db.repositorio import (
     limpar_inconsistencias_do_processo,
     obter_processo,
     obter_texto_paginas,
+    salvar_catalogo_itens,
     salvar_exigencias,
     salvar_inconsistencias,
     salvar_requisitos_item,
@@ -195,6 +196,25 @@ def processar_processo(
             requisito["arquivo_origem"] = documento_com_tabela.nome_arquivo
         salvar_requisitos_item(processo_id, requisitos_dedup, caminho_banco=caminho_banco)
         total_requisitos_item = len(requisitos_dedup)
+
+        # Fase 4, Camada 1 (planilha de preço): catálogo mínimo por item,
+        # reaproveitando os MESMOS itens já fatiados acima -- zero trabalho
+        # de extração a mais. "texto_bruto" é o item.texto original,
+        # completo, sem tentar separar descrição/unidade/quantidade
+        # (decisão B, 16/08/2026 -- ver comentário em schema.sql).
+        salvar_catalogo_itens(
+            processo_id,
+            [
+                {
+                    "numero": item.numero,
+                    "texto_bruto": item.texto,
+                    "pagina": item.pagina,
+                    "localizador": item.localizador,
+                }
+                for item in itens_tabela
+            ],
+            caminho_banco=caminho_banco,
+        )
 
     # Fase 2, Camada 3: motor de inconsistências edital-vs-TR, automático.
     # Roda por último, depois de texto_pagina estar salvo (a Camada 0 do

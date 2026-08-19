@@ -627,3 +627,135 @@ def test_gerar_declaracoes_empresa_sem_representante_devolve_400(cliente_teste, 
 
     assert resposta.status_code == 400
 
+
+
+# ---------- Planilha de preço (Fase 4, Camada 1, decisão B — 16/08/2026) ----------
+
+
+def _criar_pdf_com_tabela_itens(caminho) -> None:
+    documento = fitz.open()
+    pagina = documento.new_page()
+    pagina.insert_text(
+        (72, 72),
+        "ITEM DESCRICAO DO PRODUTO UNIDADE QUANTIDADE\n"
+        "1 TERMOMETRO DIGITAL. UND 10\n"
+        "2 SERINGA DESCARTAVEL. UND 50\n",
+    )
+    documento.save(str(caminho))
+    documento.close()
+
+
+def _checklist_falso_generico(texto_completo, contexto_processo):
+    return [
+        {
+            "categoria": "habilitacao_fiscal_social_trabalhista",
+            "descricao": "Certidão Negativa de Débitos",
+            "base_legal": None,
+            "trecho": texto_completo[:40],
+            "obrigatorio_para": "todos",
+        }
+    ]
+
+
+def _criar_processo_com_catalogo(cliente_teste, tmp_path, monkeypatch) -> int:
+    caminho_pdf = tmp_path / "edital_com_tabela.pdf"
+    _criar_pdf_com_tabela_itens(caminho_pdf)
+    with open(caminho_pdf, "rb") as arquivo:
+        resposta_criacao = cliente_teste.post(
+            "/processos",
+            data={"nome": "Pregão com tabela de itens"},
+            files={"arquivos": ("edital_com_tabela.pdf", arquivo, "application/pdf")},
+        )
+    processo_id = resposta_criacao.json()["id"]
+
+    monkeypatch.setattr("app.pipeline.extrair_checklist", _checklist_falso_generico)
+    cliente_teste.post(f"/processos/{processo_id}/analisar")
+
+    return processo_id
+
+
+def test_salvar_preco_item_via_patch_persiste(cliente_teste, tmp_path, monkeypatch):
+    processo_id = _criar_processo_com_catalogo(cliente_teste, tmp_path, monkeypatch)
+
+    resposta = cliente_teste.patch(
+        f"/processos/{processo_id}/itens/1/preco",
+        json={"quantidade": 10, "preco_unitario": 25.5},
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["numero_item"] == 1
+    assert corpo["quantidade"] == 10
+    assert corpo["preco_unitario"] == 25.5
+
+    from app.db.repositorio import obter_precos_item
+
+    precos = obter_precos_item(processo_id)
+    assert precos[1]["preco_unitario"] == 25.5
+
+
+def test_salvar_preco_item_via_patch_atualiza_sem_duplicar(cliente_teste, tmp_path, monkeypatch):
+    processo_id = _criar_processo_com_catalogo(cliente_teste, tmp_path, monkeypatch)
+
+    cliente_teste.patch(f"/processos/{processo_id}/itens/1/preco", json={"quantidade": 10, "preco_unitario": 25.5})
+    resposta = cliente_teste.patch(f"/processos/{processo_id}/itens/1/preco", json={"quantidade": 12, "preco_unitario": 30.0})
+
+    assert resposta.status_code == 200
+
+    from app.db.repositorio import obter_precos_item
+
+    precos = obter_precos_item(processo_id)
+    assert len(precos) == 1
+    assert precos[1]["quantidade"] == 12
+
+
+def test_gerar_planilha_preco_devolve_xlsx_valido(cliente_teste, tmp_path, monkeypatch):
+    processo_id = _criar_processo_com_catalogo(cliente_teste, tmp_path, monkeypatch)
+    cliente_teste.patch(f"/processos/{processo_id}/itens/1/preco", json={"quantidade": 10, "preco_unitario": 25.5})
+    cliente_teste.patch(f"/processos/{processo_id}/itens/2/preco", json={"quantidade": 20, "preco_unitario": 3.0})
+
+    resposta = cliente_teste.post(f"/processos/{processo_id}/gerar-planilha-preco")
+
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert "attachment" in resposta.headers["content-disposition"]
+
+    # Corpo precisa ser um XLSX de verdade, reabrível — não só bytes com o
+    # content-type certo, mesmo princípio já usado pro teste do DOCX.
+    import io as _io
+
+    from openpyxl import load_workbook
+
+    planilha_lida = load_workbook(_io.BytesIO(resposta.content)).active
+    assert planilha_lida is not None
+    assert planilha_lida["A2"].value == 1
+    assert planilha_lida["C2"].value == 10
+    assert planilha_lida["D2"].value == 25.5
+    assert planilha_lida["E2"].value == 255.0
+
+
+def test_gerar_planilha_preco_processo_inexistente_devolve_404(cliente_teste):
+    resposta = cliente_teste.post("/processos/999999/gerar-planilha-preco")
+    assert resposta.status_code == 404
+
+
+def test_gerar_planilha_preco_processo_sem_catalogo_devolve_400(cliente_teste, tmp_path, monkeypatch):
+    # Processo analisado normalmente (PDF sem tabela de itens reconhecível)
+    # — catálogo fica vazio, gerar a planilha não trava o servidor, devolve
+    # erro claro em vez de um XLSX vazio sem sentido.
+    caminho_pdf = tmp_path / "edital.pdf"
+    _criar_pdf_exemplo(caminho_pdf)
+    with open(caminho_pdf, "rb") as arquivo:
+        resposta_criacao = cliente_teste.post(
+            "/processos", data={"nome": "Processo sem tabela"},
+            files={"arquivos": ("edital.pdf", arquivo, "application/pdf")},
+        )
+    processo_id = resposta_criacao.json()["id"]
+    monkeypatch.setattr("app.pipeline.extrair_checklist", _checklist_falso_generico)
+    cliente_teste.post(f"/processos/{processo_id}/analisar")
+
+    resposta = cliente_teste.post(f"/processos/{processo_id}/gerar-planilha-preco")
+
+    assert resposta.status_code == 400

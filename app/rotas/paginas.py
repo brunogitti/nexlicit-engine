@@ -22,8 +22,10 @@ from app.db.repositorio import (
     criar_empresa,
     listar_empresas,
     listar_processos,
+    obter_catalogo_itens,
     obter_empresa,
     obter_inconsistencias,
+    obter_precos_item,
     obter_processo,
 )
 from app.extracao.tabela_itens import normalizar_com_mapa
@@ -459,6 +461,36 @@ def tela_checklist(request: Request, id: int):
             "percentual": percentual,
             "inconsistencias": estado_inconsistencias,
         },
+    )
+
+
+@router.get("/processos/{id}/planilha-preco")
+def tela_planilha_preco(request: Request, id: int):
+    """Fase 4, Camada 1 (decisão B, 16/08/2026): formulário de quantidade
+    e preço unitário por item, um item por linha. Catálogo vazio (edital
+    sem tabela de itens reconhecível, ou processo nunca reprocessado
+    depois desta funcionalidade existir) não é erro — o template mostra
+    aviso explicando, em vez de tela em branco sem contexto."""
+    processo = obter_processo(id)
+    if processo is None:
+        return templates.TemplateResponse(
+            request,
+            "erro_pagina.html",
+            {"mensagem": f"Processo {id} não encontrado"},
+            status_code=404,
+        )
+
+    catalogo = obter_catalogo_itens(id)
+    precos_por_item = obter_precos_item(id)
+    for item in catalogo:
+        preco = precos_por_item.get(item["numero"])
+        item["quantidade"] = preco["quantidade"] if preco else None
+        item["preco_unitario"] = preco["preco_unitario"] if preco else None
+
+    return templates.TemplateResponse(
+        request,
+        "planilha_preco.html",
+        {"processo": processo, "catalogo": catalogo},
     )
 
 

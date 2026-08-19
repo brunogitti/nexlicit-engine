@@ -2,6 +2,7 @@ fastapi
 uvicorn
 pymupdf
 python-docx
+openpyxl  # gera XLSX (Fase 4, Camada 1 -- planilha de preço)
 jinja2
 python-multipart
 python-dotenv

@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.erros import registrar_tratadores_de_erro
 from app.limpeza import executar_limpeza_com_auditoria
-from app.rotas import documentos, exigencias, inconsistencias, paginas, perguntas, processos
+from app.rotas import documentos, exigencias, inconsistencias, paginas, perguntas, planilha_preco, processos
 
 # Configuração simples do logging padrão do Python (nada de biblioteca
 # nova): nível INFO (mostra erro e informação geral, sem o ruído de DEBUG de
@@ -68,6 +68,7 @@ app.include_router(documentos.router)
 app.include_router(exigencias.router)
 app.include_router(perguntas.router)
 app.include_router(inconsistencias.router)
+app.include_router(planilha_preco.router)
 
 
 @app.get("/health")
