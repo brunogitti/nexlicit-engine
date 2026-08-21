@@ -45,7 +45,16 @@ CREATE TABLE IF NOT EXISTS processo (
     -- nesse caso é resultado real, não falha).
     checklist_verificado_em TEXT,
     checklist_sucesso INTEGER,
-    checklist_erro TEXT
+    checklist_erro TEXT,
+    -- Fase 4, Camada 1 (minuta de proposta, decisão de 19/08/2026): campo
+    -- manual, texto livre (ex.: "60 dias", "90 dias corridos"). Não é
+    -- extraído automaticamente do checklist -- investigação (Camada 0)
+    -- contra os processos reais achou a cláusula ausente em 3 de 12 e,
+    -- mesmo presente, embutida num parágrafo maior demais pra citar
+    -- isolada em 1 de 7 casos -- confiança insuficiente pra puxar sem
+    -- revisão humana. Preenchido na tela /processos/{id}/planilha-preco,
+    -- junto do resto do dado comercial digitado por gente.
+    validade_proposta TEXT
 );
 
 CREATE TABLE IF NOT EXISTS arquivo (
@@ -165,12 +174,21 @@ CREATE TABLE IF NOT EXISTS item_catalogo (
 -- numero_item) permite salvar por "upsert" (INSERT ... ON CONFLICT) --
 -- cria a linha na primeira vez que a pessoa digita algo naquele item,
 -- atualiza nas vezes seguintes, sem precisar buscar um id antes.
+--
+-- "marca"/"fabricante"/"modelo" (Fase 4, Camada 1 da minuta de proposta,
+-- 19/08/2026): mesmo ponto de entrada por item que quantidade/preço --
+-- mesma tela, mesmo padrão de salvar ao sair do campo -- em vez de
+-- tabela nova só pra isso. Todos opcionais: nem todo item exige as três
+-- coisas (ex.: serviço não tem marca/modelo de produto).
 CREATE TABLE IF NOT EXISTS preco_item (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     processo_id INTEGER NOT NULL REFERENCES processo (id),
     numero_item INTEGER NOT NULL,
     quantidade REAL,
     preco_unitario REAL,
+    marca TEXT,
+    fabricante TEXT,
+    modelo TEXT,
     UNIQUE (processo_id, numero_item)
 );
 

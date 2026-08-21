@@ -759,3 +759,120 @@ def test_gerar_planilha_preco_processo_sem_catalogo_devolve_400(cliente_teste, t
     resposta = cliente_teste.post(f"/processos/{processo_id}/gerar-planilha-preco")
 
     assert resposta.status_code == 400
+
+
+# ---------- Minuta de proposta (Fase 4, Camada 1, 19/08/2026) ----------
+
+
+def test_salvar_marca_fabricante_modelo_via_patch_persiste(cliente_teste, tmp_path, monkeypatch):
+    processo_id = _criar_processo_com_catalogo(cliente_teste, tmp_path, monkeypatch)
+
+    resposta = cliente_teste.patch(
+        f"/processos/{processo_id}/itens/1/preco",
+        json={"quantidade": 5, "preco_unitario": 200.0, "marca": "MarcaX", "fabricante": "FabricanteY", "modelo": "ModeloZ"},
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["marca"] == "MarcaX"
+    assert corpo["fabricante"] == "FabricanteY"
+    assert corpo["modelo"] == "ModeloZ"
+
+
+def test_salvar_validade_proposta_via_patch_persiste(cliente_teste, tmp_path, monkeypatch):
+    processo_id = _criar_processo_com_catalogo(cliente_teste, tmp_path, monkeypatch)
+
+    resposta = cliente_teste.patch(
+        f"/processos/{processo_id}/validade-proposta", json={"validade_proposta": "60 dias"}
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["validade_proposta"] == "60 dias"
+
+    from app.db.repositorio import obter_processo
+
+    processo = obter_processo(processo_id)
+    assert processo is not None
+    assert processo["validade_proposta"] == "60 dias"
+
+
+def test_salvar_validade_proposta_processo_inexistente_devolve_404(cliente_teste):
+    resposta = cliente_teste.patch("/processos/999999/validade-proposta", json={"validade_proposta": "60 dias"})
+    assert resposta.status_code == 404
+
+
+def test_gerar_minuta_devolve_docx_valido(cliente_teste, tmp_path, monkeypatch):
+    from app.db.repositorio import criar_empresa
+
+    processo_id = _criar_processo_com_catalogo(cliente_teste, tmp_path, monkeypatch)
+    cliente_teste.patch(
+        f"/processos/{processo_id}/itens/1/preco",
+        json={"quantidade": 10, "preco_unitario": 25.5, "marca": "MarcaX"},
+    )
+    cliente_teste.patch(f"/processos/{processo_id}/validade-proposta", json={"validade_proposta": "60 dias"})
+    empresa_id = criar_empresa(_dados_empresa_teste())
+
+    resposta = cliente_teste.post(f"/processos/{processo_id}/gerar-minuta?empresa_id={empresa_id}")
+
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert "attachment" in resposta.headers["content-disposition"]
+
+    import io as _io
+
+    import docx as _docx
+
+    documento = _docx.Document(_io.BytesIO(resposta.content))
+    texto_completo = " ".join(p.text for p in documento.paragraphs)
+    assert "Exemplo Fornecedora de Materiais Ltda" in texto_completo
+    assert "60 dias" in texto_completo
+    assert len(documento.tables) == 1
+    assert documento.tables[0].rows[1].cells[2].text.strip() != ""  # marca preenchida foi pra tabela
+
+
+def test_gerar_minuta_processo_inexistente_devolve_404(cliente_teste):
+    from app.db.repositorio import criar_empresa
+
+    empresa_id = criar_empresa(_dados_empresa_teste())
+    resposta = cliente_teste.post(f"/processos/999999/gerar-minuta?empresa_id={empresa_id}")
+    assert resposta.status_code == 404
+
+
+def test_gerar_minuta_empresa_inexistente_devolve_404(cliente_teste, tmp_path, monkeypatch):
+    processo_id = _criar_processo_com_catalogo(cliente_teste, tmp_path, monkeypatch)
+    resposta = cliente_teste.post(f"/processos/{processo_id}/gerar-minuta?empresa_id=999999")
+    assert resposta.status_code == 404
+
+
+def test_gerar_minuta_processo_sem_catalogo_devolve_400(cliente_teste, tmp_path, monkeypatch):
+    from app.db.repositorio import criar_empresa
+
+    caminho_pdf = tmp_path / "edital.pdf"
+    _criar_pdf_exemplo(caminho_pdf)
+    with open(caminho_pdf, "rb") as arquivo:
+        resposta_criacao = cliente_teste.post(
+            "/processos", data={"nome": "Processo sem tabela"},
+            files={"arquivos": ("edital.pdf", arquivo, "application/pdf")},
+        )
+    processo_id = resposta_criacao.json()["id"]
+    monkeypatch.setattr("app.pipeline.extrair_checklist", _checklist_falso_generico)
+    cliente_teste.post(f"/processos/{processo_id}/analisar")
+    empresa_id = criar_empresa(_dados_empresa_teste())
+
+    resposta = cliente_teste.post(f"/processos/{processo_id}/gerar-minuta?empresa_id={empresa_id}")
+
+    assert resposta.status_code == 400
+
+
+def test_gerar_minuta_empresa_sem_representante_devolve_400(cliente_teste, tmp_path, monkeypatch):
+    from app.db.repositorio import criar_empresa
+
+    processo_id = _criar_processo_com_catalogo(cliente_teste, tmp_path, monkeypatch)
+    dados_sem_representante = {**_dados_empresa_teste(), "representante_legal_nome": None}
+    empresa_id = criar_empresa(dados_sem_representante)
+
+    resposta = cliente_teste.post(f"/processos/{processo_id}/gerar-minuta?empresa_id={empresa_id}")
+
+    assert resposta.status_code == 400

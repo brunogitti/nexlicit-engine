@@ -1,15 +1,24 @@
 # Rotas da planilha de preço (Fase 4, Camada 1, decisão B -- 16/08/2026):
-# salvar quantidade/preço de um item (chamada pelo JS a cada campo
-# preenchido, mesmo padrão de PATCH /exigencias/{id}) e gerar o XLSX pra
-# download (mesmo padrão de POST /processos/{id}/gerar-declaracoes, em
-# app/rotas/documentos.py).
+# salvar quantidade/preço/marca/fabricante/modelo de um item (chamada
+# pelo JS a cada campo preenchido, mesmo padrão de PATCH /exigencias/{id})
+# e gerar o XLSX pra download (mesmo padrão de POST
+# /processos/{id}/gerar-declaracoes, em app/rotas/documentos.py). A
+# validade da proposta (Fase 4, Camada 1 da minuta, 19/08/2026) mora
+# nesta tela também -- mesmo lugar que o resto do dado comercial digitado
+# por gente, mesmo padrão de salvar ao sair do campo.
 
 import io
 
 from fastapi import APIRouter, Response
 from pydantic import BaseModel
 
-from app.db.repositorio import obter_catalogo_itens, obter_precos_item, obter_processo, salvar_preco_item
+from app.db.repositorio import (
+    atualizar_validade_proposta,
+    obter_catalogo_itens,
+    obter_precos_item,
+    obter_processo,
+    salvar_preco_item,
+)
 from app.geracao.planilha_preco import gerar_planilha_preco
 from app.pipeline import ProcessoNaoEncontradoError
 from app.rotas.nomes_arquivo import cabecalho_content_disposition, nome_arquivo_seguro
@@ -22,11 +31,26 @@ _TIPO_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 class PrecoItemBody(BaseModel):
     quantidade: float | None = None
     preco_unitario: float | None = None
+    marca: str | None = None
+    fabricante: str | None = None
+    modelo: str | None = None
+
+
+class ValidadePropostaBody(BaseModel):
+    validade_proposta: str | None = None
 
 
 @router.patch("/processos/{id}/itens/{numero}/preco")
 def salvar_preco_item_rota(id: int, numero: int, body: PrecoItemBody) -> dict:
-    return salvar_preco_item(id, numero, body.quantidade, body.preco_unitario)
+    return salvar_preco_item(
+        id, numero, body.quantidade, body.preco_unitario, body.marca, body.fabricante, body.modelo
+    )
+
+
+@router.patch("/processos/{id}/validade-proposta")
+def atualizar_validade_proposta_rota(id: int, body: ValidadePropostaBody) -> dict:
+    atualizar_validade_proposta(id, body.validade_proposta)
+    return {"validade_proposta": body.validade_proposta}
 
 
 @router.post("/processos/{id}/gerar-planilha-preco")

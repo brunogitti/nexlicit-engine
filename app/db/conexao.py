@@ -95,6 +95,18 @@ _COLUNAS_ADITIVAS = [
     ("processo", "checklist_verificado_em", "TEXT"),
     ("processo", "checklist_sucesso", "INTEGER"),
     ("processo", "checklist_erro", "TEXT"),
+    # Fase 4, Camada 1 (minuta de proposta, 19/08/2026) — ver comentário
+    # nas respectivas CREATE TABLE, em schema.sql, pro que cada uma
+    # significa. item_catalogo/preco_item são tabelas recentes (sessão
+    # anterior) que talvez nem tenham sido criadas ainda no banco real —
+    # se não existirem, CREATE TABLE IF NOT EXISTS já cria com estas
+    # colunas incluídas, e as entradas abaixo viram no-op (coluna já
+    # existe); se já existirem sem elas, as entradas abaixo é que
+    # resolvem. Cobre os dois casos sem precisar saber qual é o real.
+    ("processo", "validade_proposta", "TEXT"),
+    ("preco_item", "marca", "TEXT"),
+    ("preco_item", "fabricante", "TEXT"),
+    ("preco_item", "modelo", "TEXT"),
 ]
 
 

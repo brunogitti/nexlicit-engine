@@ -1,14 +1,21 @@
-# Rota de /processos/{id}/gerar-declaracoes: gera o DOCX de declaração
-# unificada (Fase 4, Camada 1) a partir do checklist já extraído e da
-# empresa selecionada. Sem chamada de IA -- montagem determinística
-# (app/geracao/declaracoes.py), mesmo princípio do Passo 8.
+# Rotas de geração de documento (DOCX) da Fase 4, Camada 1: declaração
+# unificada e minuta de proposta -- as duas a partir do checklist/catálogo
+# já extraídos e da empresa selecionada. Sem chamada de IA -- montagem
+# determinística (app/geracao/), mesmo princípio do Passo 8.
 
 import io
 
 from fastapi import APIRouter, Response
 
-from app.db.repositorio import RegistroNaoEncontradoError, obter_empresa, obter_processo
+from app.db.repositorio import (
+    RegistroNaoEncontradoError,
+    obter_catalogo_itens,
+    obter_empresa,
+    obter_precos_item,
+    obter_processo,
+)
 from app.geracao.declaracoes import gerar_declaracoes
+from app.geracao.minuta import gerar_minuta
 from app.pipeline import ProcessoNaoEncontradoError
 from app.rotas.nomes_arquivo import cabecalho_content_disposition, nome_arquivo_seguro
 
@@ -33,6 +40,33 @@ def gerar_declaracoes_rota(id: int, empresa_id: int) -> Response:
     documento.save(buffer)
 
     nome_arquivo = nome_arquivo_seguro(f"Declaracao_{processo['nome']}_{empresa['razao_social']}.docx")
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type=_TIPO_DOCX,
+        headers={"Content-Disposition": cabecalho_content_disposition(nome_arquivo)},
+    )
+
+
+@router.post("/processos/{id}/gerar-minuta")
+def gerar_minuta_rota(id: int, empresa_id: int) -> Response:
+    processo = obter_processo(id)
+    if processo is None:
+        raise ProcessoNaoEncontradoError(f"processo {id} não existe")
+
+    empresa = obter_empresa(empresa_id)
+    if empresa is None:
+        raise RegistroNaoEncontradoError(f"empresa {empresa_id} não existe")
+
+    catalogo = obter_catalogo_itens(id)
+    precos = obter_precos_item(id)
+
+    documento = gerar_minuta(processo, empresa, catalogo, precos)
+
+    buffer = io.BytesIO()
+    documento.save(buffer)
+
+    nome_arquivo = nome_arquivo_seguro(f"Minuta_de_Proposta_{processo['nome']}_{empresa['razao_social']}.docx")
 
     return Response(
         content=buffer.getvalue(),

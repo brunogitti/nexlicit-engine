@@ -383,24 +383,40 @@ def salvar_preco_item(
     numero_item: int,
     quantidade: float | None,
     preco_unitario: float | None,
+    marca: str | None = None,
+    fabricante: str | None = None,
+    modelo: str | None = None,
     caminho_banco: str | None = None,
 ) -> dict[str, Any]:
-    """Salva quantidade/preço de UM item — cria a linha se é a primeira
-    vez que esse item recebe algum valor, atualiza se já existia (upsert
-    via ON CONFLICT, chave é UNIQUE(processo_id, numero_item) do schema).
-    Mesmo princípio de salvar ao sair do campo (blur) que checklist.js já
-    usa pra observação — quem chama não precisa saber se a linha já
-    existe. Devolve a linha já salva."""
+    """Salva quantidade/preço/marca/fabricante/modelo de UM item — cria a
+    linha se é a primeira vez que esse item recebe algum valor, atualiza
+    se já existia (upsert via ON CONFLICT, chave é UNIQUE(processo_id,
+    numero_item) do schema). Mesmo princípio de salvar ao sair do campo
+    (blur) que checklist.js já usa pra observação — quem chama não
+    precisa saber se a linha já existe. Devolve a linha já salva.
+
+    Os 5 campos são sempre sobrescritos com o que for passado (sem
+    "preservar valor antigo se None") — quem chama (a rota PATCH, a
+    partir do JS) sempre reenvia o estado atual dos 5 campos da linha
+    inteira, não só o campo que a pessoa acabou de editar, mesmo padrão
+    que salvarObservacao() de checklist.js já usa pra não apagar o
+    status_check sem querer.
+    """
     conexao = obter_conexao(caminho_banco)
     try:
         conexao.execute(
             """
-            INSERT INTO preco_item (processo_id, numero_item, quantidade, preco_unitario)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO preco_item (processo_id, numero_item, quantidade, preco_unitario, marca, fabricante, modelo)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (processo_id, numero_item)
-            DO UPDATE SET quantidade = excluded.quantidade, preco_unitario = excluded.preco_unitario
+            DO UPDATE SET
+                quantidade = excluded.quantidade,
+                preco_unitario = excluded.preco_unitario,
+                marca = excluded.marca,
+                fabricante = excluded.fabricante,
+                modelo = excluded.modelo
             """,
-            (processo_id, numero_item, quantidade, preco_unitario),
+            (processo_id, numero_item, quantidade, preco_unitario, marca, fabricante, modelo),
         )
         linha = conexao.execute(
             "SELECT * FROM preco_item WHERE processo_id = ? AND numero_item = ?",
@@ -426,6 +442,30 @@ def obter_precos_item(processo_id: int, caminho_banco: str | None = None) -> dic
             "SELECT * FROM preco_item WHERE processo_id = ?", (processo_id,)
         ).fetchall()
         return {linha["numero_item"]: dict(linha) for linha in linhas}
+    finally:
+        conexao.close()
+
+
+def atualizar_validade_proposta(
+    processo_id: int, validade_proposta: str | None, caminho_banco: str | None = None
+) -> None:
+    """Salva o texto de validade da proposta digitado por gente (Fase 4,
+    Camada 1 da minuta, 19/08/2026) — campo simples, texto livre (ex.:
+    "60 dias"), nunca extraído automaticamente do checklist (ver
+    comentário em schema.sql pro motivo). Levanta RegistroNaoEncontradoError
+    se o processo não existir, mesmo padrão de atualizar_status_exigencia."""
+    conexao = obter_conexao(caminho_banco)
+    try:
+        cursor = conexao.execute(
+            "UPDATE processo SET validade_proposta = ? WHERE id = ?",
+            (validade_proposta, processo_id),
+        )
+        if cursor.rowcount == 0:
+            raise RegistroNaoEncontradoError(f"processo {processo_id} não existe")
+        conexao.commit()
+    except Exception:
+        conexao.rollback()
+        raise
     finally:
         conexao.close()
 

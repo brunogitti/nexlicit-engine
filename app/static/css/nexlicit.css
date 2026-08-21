@@ -746,13 +746,35 @@ summary.card-exigencia-topo:hover .card-exigencia-descricao{
   .par-trechos{grid-template-columns:1fr;}
 }
 
-/* ---------- Planilha de preço (Fase 4, Camada 1, decisão B — 16/08/2026) ---------- */
+/* ---------- Planilha de preço (Fase 4, Camada 1, decisão B — 16/08/2026;
+   estendida 19/08/2026 com marca/fabricante/modelo e validade da
+   proposta, pra minuta) ---------- */
 /* Primeira tabela HTML de verdade do projeto (o resto da tela usa cards) —
    faz sentido aqui porque cada item é uma linha curta e uniforme (número,
-   descrição, dois campos), o formato que tabela existe pra resolver bem;
-   um card por item, com editais de até ~580 itens (Ouroeste), rolaria
+   descrição, campos), o formato que tabela existe pra resolver bem; um
+   card por item, com editais de até ~580 itens (Ouroeste), rolaria
    demais sem ganhar nada em troca. */
 .planilha-preco-acoes{margin:20px 0;}
+
+.campo-validade-proposta{margin:0 0 24px;}
+.campo-validade-proposta label{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  max-width:320px;
+  font-size:0.85rem;
+  font-weight:500;
+  color:var(--ink-soft);
+}
+.campo-validade-proposta input[type="text"]{
+  font-family:'IBM Plex Sans', sans-serif;
+  font-size:16px;
+  padding:12px 14px;
+  border:1px solid var(--line-strong);
+  border-radius:4px;
+  background:var(--card);
+  color:var(--ink);
+}
 
 .tabela-planilha-preco-wrap{
   overflow-x:auto; /* editais com descrição longa não devem estourar a tela em telas estreitas */
@@ -781,7 +803,8 @@ summary.card-exigencia-topo:hover .card-exigencia-descricao{
   letter-spacing:0.03em;
 }
 .tabela-planilha-preco tbody tr:last-child td{border-bottom:none;}
-.tabela-planilha-preco input[type="number"]{
+.tabela-planilha-preco input[type="number"],
+.tabela-planilha-preco input[type="text"]{
   font-family:'IBM Plex Sans', sans-serif;
   font-size:16px; /* 16px+ evita zoom automático no iOS ao focar, mesmo motivo do .formulario */
   width:100%;

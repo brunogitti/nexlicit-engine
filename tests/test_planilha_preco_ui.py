@@ -118,3 +118,63 @@ def test_preencher_quantidade_e_preco_persiste_apos_recarregar(servidor, navegad
     precos = obter_precos_item(processo_id, caminho_banco=caminho_db)
     assert precos[numero_item]["quantidade"] == 10
     assert precos[numero_item]["preco_unitario"] == 25.5
+
+
+def test_preencher_marca_fabricante_modelo_e_validade_persiste_apos_recarregar(servidor, navegador):
+    # Fase 4, Camada 1 da minuta (19/08/2026) -- mesma lição do bug de
+    # quantidade "10.0" da camada anterior: testar o caminho real de
+    # digitação, não só a função isolada. Cobre os 3 campos de texto
+    # novos por item MAIS o campo de validade da proposta (que vive fora
+    # da tabela, com rota própria).
+    base_url, caminho_db = servidor
+    processo_id, numero_item = _processo_com_catalogo(caminho_db)
+
+    pagina = navegador.new_page()
+    try:
+        pagina.goto(f"{base_url}/processos/{processo_id}/planilha-preco", wait_until="networkidle")
+
+        linha = pagina.query_selector(f'tr[data-numero-item="{numero_item}"]')
+        assert linha is not None
+        campo_marca = linha.query_selector(".campo-marca")
+        campo_fabricante = linha.query_selector(".campo-fabricante")
+        campo_modelo = linha.query_selector(".campo-modelo")
+        campo_validade = pagina.query_selector("#campo-validade-proposta")
+        assert campo_marca is not None and campo_fabricante is not None
+        assert campo_modelo is not None and campo_validade is not None
+
+        campo_marca.fill("MarcaX")
+        with pagina.expect_response(lambda r: f"/itens/{numero_item}/preco" in r.url):
+            campo_marca.press("Tab")
+
+        campo_fabricante.fill("FabricanteY")
+        with pagina.expect_response(lambda r: f"/itens/{numero_item}/preco" in r.url):
+            campo_fabricante.press("Tab")
+
+        campo_modelo.fill("ModeloZ")
+        with pagina.expect_response(lambda r: f"/itens/{numero_item}/preco" in r.url):
+            campo_modelo.press("Tab")
+
+        campo_validade.fill("60 dias")
+        with pagina.expect_response(lambda r: "/validade-proposta" in r.url) as info_validade:
+            campo_validade.press("Tab")
+        assert info_validade.value.status == 200
+
+        # A prova real é persistir de verdade -- recarrega do zero.
+        pagina.goto(f"{base_url}/processos/{processo_id}/planilha-preco", wait_until="networkidle")
+        linha_recarregada = pagina.query_selector(f'tr[data-numero-item="{numero_item}"]')
+        assert linha_recarregada is not None
+        assert linha_recarregada.query_selector(".campo-marca").input_value() == "MarcaX"
+        assert linha_recarregada.query_selector(".campo-fabricante").input_value() == "FabricanteY"
+        assert linha_recarregada.query_selector(".campo-modelo").input_value() == "ModeloZ"
+        assert pagina.query_selector("#campo-validade-proposta").input_value() == "60 dias"
+    finally:
+        pagina.close()
+
+    from app.db.repositorio import obter_precos_item, obter_processo
+    precos = obter_precos_item(processo_id, caminho_banco=caminho_db)
+    assert precos[numero_item]["marca"] == "MarcaX"
+    assert precos[numero_item]["fabricante"] == "FabricanteY"
+    assert precos[numero_item]["modelo"] == "ModeloZ"
+    processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo is not None
+    assert processo["validade_proposta"] == "60 dias"

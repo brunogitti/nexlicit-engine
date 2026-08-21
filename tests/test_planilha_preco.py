@@ -12,9 +12,12 @@ import pytest
 from openpyxl import load_workbook
 
 from app.db.repositorio import (
+    RegistroNaoEncontradoError,
+    atualizar_validade_proposta,
     criar_processo,
     obter_catalogo_itens,
     obter_precos_item,
+    obter_processo,
     salvar_catalogo_itens,
     salvar_preco_item,
 )
@@ -107,6 +110,82 @@ def test_obter_precos_item_indexado_por_numero_item(caminho_db):
 def test_obter_precos_item_processo_sem_preco_devolve_dict_vazio(caminho_db):
     processo_id = criar_processo({"nome": "Processo de teste"}, caminho_banco=caminho_db)
     assert obter_precos_item(processo_id, caminho_banco=caminho_db) == {}
+
+
+# ---------- Repositório: marca/fabricante/modelo (Fase 4, Camada 1 da
+# minuta, 19/08/2026 -- mesmo ponto de entrada por item de preco_item) ----------
+
+
+def test_salvar_preco_item_com_marca_fabricante_modelo(caminho_db):
+    processo_id = criar_processo({"nome": "Processo de teste"}, caminho_banco=caminho_db)
+
+    linha = salvar_preco_item(
+        processo_id, 1, quantidade=5, preco_unitario=200.0,
+        marca="MarcaX", fabricante="FabricanteY", modelo="ModeloZ",
+        caminho_banco=caminho_db,
+    )
+
+    assert linha["marca"] == "MarcaX"
+    assert linha["fabricante"] == "FabricanteY"
+    assert linha["modelo"] == "ModeloZ"
+
+
+def test_salvar_preco_item_marca_fabricante_modelo_sao_opcionais(caminho_db):
+    # Nem todo item exige marca/fabricante/modelo (ex.: serviço, não
+    # produto) -- os três ficam None sem quebrar nada.
+    processo_id = criar_processo({"nome": "Processo de teste"}, caminho_banco=caminho_db)
+
+    linha = salvar_preco_item(processo_id, 1, quantidade=1, preco_unitario=10.0, caminho_banco=caminho_db)
+
+    assert linha["marca"] is None
+    assert linha["fabricante"] is None
+    assert linha["modelo"] is None
+
+
+def test_salvar_preco_item_atualiza_marca_sem_perder_quantidade_ja_salva(caminho_db):
+    # Padrão real de preenchimento: cada blur reenvia o estado ATUAL da
+    # linha inteira (não só o campo editado) -- o JS que garante isso;
+    # aqui confere que o repositório aplica exatamente o que recebe.
+    processo_id = criar_processo({"nome": "Processo de teste"}, caminho_banco=caminho_db)
+
+    salvar_preco_item(processo_id, 1, quantidade=5, preco_unitario=200.0, caminho_banco=caminho_db)
+    linha = salvar_preco_item(
+        processo_id, 1, quantidade=5, preco_unitario=200.0, marca="MarcaX", caminho_banco=caminho_db
+    )
+
+    assert linha["quantidade"] == 5
+    assert linha["preco_unitario"] == 200.0
+    assert linha["marca"] == "MarcaX"
+
+
+# ---------- Repositório: validade da proposta (processo.validade_proposta,
+# Fase 4, Camada 1 da minuta, 19/08/2026) ----------
+
+
+def test_atualizar_validade_proposta_salva_texto_livre(caminho_db):
+    processo_id = criar_processo({"nome": "Processo de teste"}, caminho_banco=caminho_db)
+
+    atualizar_validade_proposta(processo_id, "60 dias", caminho_banco=caminho_db)
+
+    processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo is not None
+    assert processo["validade_proposta"] == "60 dias"
+
+
+def test_atualizar_validade_proposta_aceita_none_pra_limpar_o_campo(caminho_db):
+    processo_id = criar_processo({"nome": "Processo de teste"}, caminho_banco=caminho_db)
+    atualizar_validade_proposta(processo_id, "60 dias", caminho_banco=caminho_db)
+
+    atualizar_validade_proposta(processo_id, None, caminho_banco=caminho_db)
+
+    processo = obter_processo(processo_id, caminho_banco=caminho_db)
+    assert processo is not None
+    assert processo["validade_proposta"] is None
+
+
+def test_atualizar_validade_proposta_processo_inexistente_levanta_erro(caminho_db):
+    with pytest.raises(RegistroNaoEncontradoError):
+        atualizar_validade_proposta(999999, "60 dias", caminho_banco=caminho_db)
 
 
 # ---------- Geração do XLSX (função pura) ----------

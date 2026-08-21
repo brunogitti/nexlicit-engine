@@ -14,25 +14,29 @@ from __future__ import annotations
 import string
 from typing import Any
 
-from docx import Document
+# Ver comentário equivalente em app/geracao/assinatura.py: "docx.Document"
+# é a função fábrica, "docx.document.Document" é a classe de verdade,
+# a que serve pra anotar tipo.
+from docx import Document as _construir_documento
+from docx.document import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
+
+from app.geracao.assinatura import EmpresaSemRepresentanteError, adicionar_bloco_assinatura
 
 # Mesmo --stamp do CSS do app (app/static/css/nexlicit.css) -- cor de
 # alerta já estabelecida no projeto, não uma nova só pra isto.
 _COR_ALERTA = RGBColor(0x8B, 0x2E, 0x2E)
 
+# Re-exportado por compatibilidade: erros.py e outros módulos importam
+# EmpresaSemRepresentanteError direto daqui desde antes do bloco de
+# assinatura ser extraído pra app/geracao/assinatura.py (19/08/2026).
+__all__ = ["SemDeclaracoesError", "EmpresaSemRepresentanteError", "gerar_declaracoes"]
+
 
 class SemDeclaracoesError(Exception):
     """O processo não tem nenhuma exigência de categoria
     "declaracoes_exigidas" salva no checklist -- não há o que gerar."""
-
-
-class EmpresaSemRepresentanteError(Exception):
-    """A empresa selecionada não tem "representante_legal_nome"
-    cadastrado -- obrigatório pro bloco de assinatura. Recusa com
-    mensagem clara em vez de gerar um documento com lacuna óbvia no
-    lugar de quem vai assinar."""
 
 
 def _letra(indice: int) -> str:
@@ -80,7 +84,7 @@ def gerar_declaracoes(processo: dict[str, Any], empresa: dict[str, Any]) -> Docu
             "cadastrado -- complete o cadastro antes de gerar o documento"
         )
 
-    documento = Document()
+    documento = _construir_documento()
 
     titulo = documento.add_paragraph()
     titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -139,27 +143,13 @@ def gerar_declaracoes(processo: dict[str, Any], empresa: dict[str, Any]) -> Docu
     documento.add_paragraph()
     documento.add_paragraph()
 
-    data = documento.add_paragraph()
-    data.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    data.add_run("______________________, ____ de _______________ de ________.")
-
-    documento.add_paragraph()
-    documento.add_paragraph()
-
-    assinatura = documento.add_paragraph()
-    assinatura.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    assinatura.add_run("____________________________________")
-
-    linha_nome = documento.add_paragraph()
-    linha_nome.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    texto_nome = empresa["representante_legal_nome"]
-    if empresa.get("representante_legal_cargo"):
-        texto_nome += f", {empresa['representante_legal_cargo']}"
-    linha_nome.add_run(texto_nome)
-
-    if empresa.get("representante_legal_cpf"):
-        linha_cpf = documento.add_paragraph()
-        linha_cpf.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        linha_cpf.add_run(f"CPF: {empresa['representante_legal_cpf']}")
+    # Bloco de assinatura compartilhado com a minuta de proposta (Fase 4,
+    # Camada 1, 19/08/2026) -- ver app/geracao/assinatura.py. A checagem
+    # de representante legal já aconteceu no início desta função (linha
+    # ~81), antes de montar o corpo inteiro do documento -- a checagem
+    # que adicionar_bloco_assinatura() faz de novo aqui nunca dispara na
+    # prática, é só defensivo caso algum dia alguém chame esta função sem
+    # passar pela checagem cedo.
+    adicionar_bloco_assinatura(documento, empresa)
 
     return documento

@@ -8,7 +8,7 @@
 {% if not catalogo %}
 <p class="lead">Este processo não tem catálogo de itens salvo. Isso acontece quando o edital não tem uma tabela de itens reconhecível, ou quando o processo foi analisado antes desta funcionalidade existir — reprocesse a análise (botão "Reprocessar" na tela do checklist) pra gerar o catálogo.</p>
 {% else %}
-<p class="lead">Preencha quantidade e preço unitário por item — salva sozinho ao sair do campo, sem precisar de botão "salvar". Item sem quantidade ou preço não trava a planilha: fica em branco e destacado nela.</p>
+<p class="lead">Preencha quantidade, preço unitário e (se aplicável) marca/fabricante/modelo por item — salva sozinho ao sair do campo, sem precisar de botão "salvar". Item sem dado não trava a planilha: fica em branco e destacado nela.</p>
 
 <form method="post" action="/processos/{{ processo.id }}/gerar-planilha-preco" class="planilha-preco-acoes">
   <button type="submit" class="btn btn-primary">Baixar planilha (XLSX)</button>
@@ -16,12 +16,28 @@
 
 <span id="aviso-salvamento-preco" class="aviso-salvamento" hidden>Não foi possível salvar. Tente de novo.</span>
 
+<!-- Fase 4, Camada 1 da minuta de proposta (19/08/2026): campo manual,
+     texto livre -- Camada 0 confirmou que não dá pra puxar isso do
+     checklist com confiança suficiente (ausente em 1/4 dos processos
+     reais, e mesmo presente às vezes vem embutido num parágrafo maior,
+     não citável isolado). Mesmo padrão de salvar ao sair do campo do
+     resto da tela. -->
+<div class="campo-validade-proposta">
+  <label for="campo-validade-proposta">Validade da proposta (usada na minuta)
+    <input type="text" id="campo-validade-proposta" placeholder="ex.: 60 dias"
+           value="{{ processo.validade_proposta or '' }}">
+  </label>
+</div>
+
 <div class="tabela-planilha-preco-wrap">
   <table class="tabela-planilha-preco mono" id="tabela-planilha-preco" data-processo-id="{{ processo.id }}">
     <thead>
       <tr>
         <th>Item</th>
         <th>Descrição (texto bruto do edital)</th>
+        <th>Marca</th>
+        <th>Fabricante</th>
+        <th>Modelo</th>
         <th>Quantidade</th>
         <th>Preço unitário (R$)</th>
       </tr>
@@ -31,6 +47,21 @@
       <tr data-numero-item="{{ item.numero }}">
         <td>{{ item.numero }}</td>
         <td title="{{ item.texto_bruto }}">{{ item.texto_bruto|truncate(140) }}</td>
+        <td>
+          <input type="text" class="campo-marca"
+                 aria-label="Marca do item {{ item.numero }}"
+                 value="{{ item.marca or '' }}">
+        </td>
+        <td>
+          <input type="text" class="campo-fabricante"
+                 aria-label="Fabricante do item {{ item.numero }}"
+                 value="{{ item.fabricante or '' }}">
+        </td>
+        <td>
+          <input type="text" class="campo-modelo"
+                 aria-label="Modelo do item {{ item.numero }}"
+                 value="{{ item.modelo or '' }}">
+        </td>
         <td>
           <!-- "%g" tira o ".0" de número inteiro guardado como REAL no
                SQLite (10.0 -> "10"), sem cortar casa decimal de verdade

@@ -466,11 +466,13 @@ def tela_checklist(request: Request, id: int):
 
 @router.get("/processos/{id}/planilha-preco")
 def tela_planilha_preco(request: Request, id: int):
-    """Fase 4, Camada 1 (decisão B, 16/08/2026): formulário de quantidade
-    e preço unitário por item, um item por linha. Catálogo vazio (edital
-    sem tabela de itens reconhecível, ou processo nunca reprocessado
-    depois desta funcionalidade existir) não é erro — o template mostra
-    aviso explicando, em vez de tela em branco sem contexto."""
+    """Fase 4, Camada 1 (decisão B, 16/08/2026 -- estendida 19/08/2026 com
+    marca/fabricante/modelo e validade da proposta, pra minuta): formulário
+    de dado comercial por item, um item por linha, mais o campo de validade
+    da proposta (por processo, não por item). Catálogo vazio (edital sem
+    tabela de itens reconhecível, ou processo nunca reprocessado depois
+    desta funcionalidade existir) não é erro — o template mostra aviso
+    explicando, em vez de tela em branco sem contexto."""
     processo = obter_processo(id)
     if processo is None:
         return templates.TemplateResponse(
@@ -486,6 +488,9 @@ def tela_planilha_preco(request: Request, id: int):
         preco = precos_por_item.get(item["numero"])
         item["quantidade"] = preco["quantidade"] if preco else None
         item["preco_unitario"] = preco["preco_unitario"] if preco else None
+        item["marca"] = preco["marca"] if preco else None
+        item["fabricante"] = preco["fabricante"] if preco else None
+        item["modelo"] = preco["modelo"] if preco else None
 
     return templates.TemplateResponse(
         request,
