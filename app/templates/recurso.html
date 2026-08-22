@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titulo %}Recurso administrativo — {{ processo.nome }} — NexLicit Engine{% endblock %}
+{% block conteudo %}
+
+<span class="eyebrow">Recurso administrativo</span>
+<h1>{{ processo.nome }}</h1>
+<p class="lead">Recurso contra inabilitação indevida (v1). Escolha a exigência do checklist que motivou a inabilitação, descreva com o máximo de detalhe o que aconteceu, e escolha a empresa recorrente — a IA estrutura o argumento a partir disso. <strong>O documento gerado é uma minuta: revise sempre antes de protocolar.</strong></p>
+
+{% if not exigencias %}
+<p class="lead">Este processo não tem nenhuma exigência de habilitação no checklist elegível pra recurso — inabilitação só decorre de falha em documento de Habilitação Jurídica, Habilitação Fiscal/Social/Trabalhista, Qualificação Econômico-Financeira ou Qualificação Técnica.</p>
+{% elif not empresas %}
+<p class="lead">Nenhuma empresa cadastrada ainda. <a href="/empresas/nova">Cadastre uma empresa</a> antes de gerar o recurso.</p>
+{% else %}
+
+<form class="formulario" method="post" action="/processos/{{ processo.id }}/gerar-recurso">
+  <label>Exigência que motivou a inabilitação *
+    <select name="exigencia_id" required>
+      {% for exigencia in exigencias %}
+      <option value="{{ exigencia.id }}">{{ exigencia.rotulo_categoria }} — {{ exigencia.descricao }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>O que aconteceu? *
+    <textarea name="narrativa" rows="7" required
+              placeholder="Descreva com o máximo de detalhe possível: qual documento, o que o pregoeiro considerou, datas relevantes, e por que você acredita que a inabilitação foi indevida. Quanto mais específico, melhor o argumento — um relato vago não é suficiente para gerar o recurso."></textarea>
+  </label>
+
+  <label>Empresa recorrente *
+    <select name="empresa_id" required>
+      {% for empresa in empresas %}
+      <option value="{{ empresa.id }}">{{ empresa.razao_social }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <button type="submit" class="btn btn-primary">Gerar recurso (DOCX)</button>
+</form>
+{% endif %}
+
+{% endblock %}

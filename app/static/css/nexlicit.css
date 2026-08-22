@@ -151,7 +151,9 @@ main.wrap{padding:36px 24px 80px;}
 .formulario input[type="text"],
 .formulario input[type="number"],
 .formulario input[type="date"],
-.formulario input[type="file"]{
+.formulario input[type="file"],
+.formulario select,
+.formulario textarea{
   font-family:'IBM Plex Sans', sans-serif;
   font-size:16px; /* 16px+ evita zoom automático no iOS ao focar */
   padding:12px 14px;
@@ -159,6 +161,15 @@ main.wrap{padding:36px 24px 80px;}
   border-radius:4px;
   background:var(--card);
   color:var(--ink);
+}
+/* textarea puxa a largura padrão do navegador (bem menor que o resto do
+   formulário) e permite redimensionar na horizontal por padrão -- os dois
+   destoam do resto do form, que sempre ocupa a largura inteira do
+   container (max-width:640px do .formulario). */
+.formulario textarea{
+  width:100%;
+  resize:vertical;
+  font-family:inherit;
 }
 /* O input[type=file] acima já ganha borda/fundo/padding igual aos outros
    campos, mas o BOTÃO "Escolher arquivos" embutido nele é um elemento à

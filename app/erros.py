@@ -40,6 +40,13 @@
 #                                        funcionalidade existir, ou edital
 #                                        sem tabela de itens reconhecível)
 #                                        (Fase 4, planilha de preço)
+#   ExigenciaForaDeEscopoDoRecursoError -> 400 exigência escolhida não é de
+#                                        categoria de habilitação (Fase 4,
+#                                        recurso administrativo)
+#   NarrativaInsuficienteError   -> 400  relato do recorrente não tem
+#                                        detalhe suficiente pra montar o
+#                                        argumento (Fase 4, recurso
+#                                        administrativo)
 #
 # Todo tratador loga a exceção com traceback (logging, nível ERROR) antes de
 # montar a resposta — mesmo os 400/404/409 "esperados". Assim o terminal do
@@ -63,6 +70,8 @@ from app.ia.llm_client import (
     RespostaIAError,
 )
 from app.pipeline import (
+    ExigenciaForaDeEscopoDoRecursoError,
+    NarrativaInsuficienteError,
     ProcessoJaAnalisadoError,
     ProcessoNaoEncontradoError,
     ProcessoSemArquivosError,
@@ -185,5 +194,17 @@ def registrar_tratadores_de_erro(app: FastAPI) -> None:
     @app.exception_handler(SemCatalogoError)
     async def _tratar_sem_catalogo(
         requisicao: Request, erro: SemCatalogoError
+    ) -> JSONResponse:
+        return _resposta_erro(400, str(erro), requisicao, erro)
+
+    @app.exception_handler(ExigenciaForaDeEscopoDoRecursoError)
+    async def _tratar_exigencia_fora_de_escopo(
+        requisicao: Request, erro: ExigenciaForaDeEscopoDoRecursoError
+    ) -> JSONResponse:
+        return _resposta_erro(400, str(erro), requisicao, erro)
+
+    @app.exception_handler(NarrativaInsuficienteError)
+    async def _tratar_narrativa_insuficiente(
+        requisicao: Request, erro: NarrativaInsuficienteError
     ) -> JSONResponse:
         return _resposta_erro(400, str(erro), requisicao, erro)

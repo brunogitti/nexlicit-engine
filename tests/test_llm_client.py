@@ -23,6 +23,7 @@ from app.ia.llm_client import (
     RespostaIAError,
     detectar_inconsistencias,
     extrair_checklist,
+    gerar_argumento_recurso,
     responder_pergunta,
 )
 
@@ -314,6 +315,165 @@ def test_chamar_gemini_inconsistencias_recusa_sem_api_key(monkeypatch):
         llm_client._chamar_gemini_inconsistencias("[PÁGINA 1]\nedital", "[PÁGINA 2]\ntr")
 
 
+# ---------- gerar_argumento_recurso (recurso administrativo, Fase 4, Camada 1) ----------
+
+RESPOSTA_RECURSO_JSON_SUFICIENTE = json.dumps(
+    {
+        "narrativa_suficiente": True,
+        "motivo_insuficiencia": None,
+        "fundamentacao": "A certidão apresentada estava dentro do prazo de validade na data da sessão, conforme o relato do recorrente, o que contradiz o motivo declarado para a inabilitação.",
+        "pedido": "Requer-se a reconsideração da inabilitação e o prosseguimento do certame com a habilitação do recorrente.",
+    }
+)
+
+RESPOSTA_RECURSO_JSON_INSUFICIENTE = json.dumps(
+    {
+        "narrativa_suficiente": False,
+        "motivo_insuficiencia": "o relato não informa qual documento foi considerado irregular nem a data da ocorrência",
+        "fundamentacao": None,
+        "pedido": None,
+    }
+)
+
+
+def test_gerar_argumento_recurso_processa_resposta_suficiente(monkeypatch):
+    def gemini_falso(descricao, trecho, base_legal, narrativa):
+        assert descricao == "Certidão do CREA"
+        assert trecho == "apresentar certidão do CREA em dia"
+        assert base_legal == "art. 66 da Lei 14.133/2021"
+        assert narrativa == "a certidão estava válida"
+        return RESPOSTA_RECURSO_JSON_SUFICIENTE
+
+    monkeypatch.setattr(llm_client, "LLM_PROVIDER", "gemini")
+    monkeypatch.setattr(llm_client, "_chamar_gemini_recurso", gemini_falso)
+
+    resultado = gerar_argumento_recurso(
+        "Certidão do CREA", "apresentar certidão do CREA em dia",
+        "art. 66 da Lei 14.133/2021", "a certidão estava válida",
+    )
+
+    assert resultado["narrativa_suficiente"] is True
+    assert "certidão" in resultado["fundamentacao"]
+    assert resultado["pedido"] is not None
+
+
+def test_gerar_argumento_recurso_processa_resposta_insuficiente(monkeypatch):
+    monkeypatch.setattr(llm_client, "LLM_PROVIDER", "gemini")
+    monkeypatch.setattr(
+        llm_client, "_chamar_gemini_recurso", lambda d, t, b, n: RESPOSTA_RECURSO_JSON_INSUFICIENTE
+    )
+
+    resultado = gerar_argumento_recurso("descrição", "trecho", None, "relato vago")
+
+    assert resultado["narrativa_suficiente"] is False
+    assert resultado["fundamentacao"] is None
+    assert resultado["pedido"] is None
+    assert "documento" in resultado["motivo_insuficiencia"]
+
+
+def test_gerar_argumento_recurso_rejeita_provedor_nao_suportado(monkeypatch):
+    monkeypatch.setattr(llm_client, "LLM_PROVIDER", "claude")
+
+    with pytest.raises(ProvedorNaoSuportadoError, match="claude"):
+        gerar_argumento_recurso("descrição", "trecho", None, "narrativa")
+
+
+def test_gerar_argumento_recurso_nao_quebra_com_json_malformado(monkeypatch):
+    monkeypatch.setattr(llm_client, "LLM_PROVIDER", "gemini")
+    monkeypatch.setattr(llm_client, "_chamar_gemini_recurso", lambda d, t, b, n: "isso não é um JSON {")
+
+    with pytest.raises(RespostaIAError):
+        gerar_argumento_recurso("descrição", "trecho", None, "narrativa")
+
+
+def test_chamar_gemini_recurso_recusa_sem_api_key(monkeypatch):
+    monkeypatch.setattr(llm_client, "GEMINI_API_KEY", "")
+
+    with pytest.raises(ConfiguracaoAusenteError, match="GEMINI_API_KEY"):
+        llm_client._chamar_gemini_recurso("descrição", "trecho", None, "narrativa")
+
+
+# Trava extra (_PADRAO_CITACAO_DE_ARTIGO): confere que, mesmo se a IA
+# desobedecer a instrução do prompt e citar um artigo na prosa, o sistema
+# recusa a resposta em vez de deixar passar -- é o guarda-corpo que não
+# depende só do prompt ter funcionado (mesmo espírito de sempre neste
+# projeto: nunca confiar cegamente numa instrução de prompt sozinha).
+@pytest.mark.parametrize("campo", ["fundamentacao", "pedido"])
+def test_gerar_argumento_recurso_rejeita_citacao_de_artigo_na_fundamentacao(monkeypatch, campo):
+    resposta_com_citacao = json.dumps(
+        {
+            "narrativa_suficiente": True,
+            "motivo_insuficiencia": None,
+            "fundamentacao": "texto normal" if campo != "fundamentacao" else "conforme o art. 66 da lei, a inabilitação foi indevida",
+            "pedido": "texto normal" if campo != "pedido" else "requer-se, com base no artigo 66, a reforma da decisão",
+        }
+    )
+    monkeypatch.setattr(llm_client, "LLM_PROVIDER", "gemini")
+    monkeypatch.setattr(llm_client, "_chamar_gemini_recurso", lambda d, t, b, n: resposta_com_citacao)
+
+    with pytest.raises(RespostaIAError, match="artigo"):
+        gerar_argumento_recurso("descrição", "trecho", "art. 66 da Lei 14.133/2021", "narrativa")
+
+
+# Cobertura de largura do regex (19/08/2026, a pedido do Bruno): testa o
+# padrão DIRETO contra várias formas reais de citação, não só o formato
+# único usado no teste acima — um regex estreito demais dá falsa sensação
+# de segurança (a trava existe, mas não pega o formato que a IA realmente
+# usar). Achado real ao rodar isto pela primeira vez: "Artigo nº 66",
+# "parágrafo" por extenso e "alínea" não eram cobertos — corrigido no
+# próprio padrão (ver comentário em _PADRAO_CITACAO_DE_ARTIGO), com os
+# casos que motivaram a correção registrados aqui.
+@pytest.mark.parametrize(
+    "texto,deveria_pegar",
+    [
+        ("conforme o art. 66 da lei", True),
+        ("nos termos do artigo 63, inciso IV", True),
+        ("previsto no § 5º", True),
+        ("de acordo com o inciso III", True),
+        ("Art.66 sem espaço", True),
+        ("artigo 66º", True),
+        ("Art 66, III da Lei 14.133/2021", True),
+        ("art 66-A (artigo com sufixo de letra)", True),
+        ("ART. 68 (maiúsculo, sem distinguir caixa)", True),
+        ("conforme o Artigo nº 66", True),  # achado real: "nº" entre a palavra e o número
+        ("nos termos do art. n.º 66", True),
+        ("com base no art.66,inciso III (sem espaço nenhum)", True),
+        ("descumprimento do parágrafo 5º do dispositivo", True),  # achado real: "parágrafo" por extenso
+        ("descumprimento do §5º", True),
+        ("previsto na alínea a do inciso II", True),
+        ('previsto na alínea "a"', True),  # achado real: alínea sem numeral logo depois
+        ("conforme o parágrafo único do dispositivo", True),
+        ("o caput do dispositivo aplicável", False),  # "caput" não tem número pra errar
+        ("conforme a Lei 14.133/2021", False),  # cita a LEI, não um artigo específico
+        ("o dispositivo legal citado nesta petição", False),
+        ("requer a reconsideração da decisão de inabilitação", False),
+        ("o artigo do jornal não é relevante aqui", False),  # "artigo" sem número, uso comum da palavra
+    ],
+)
+def test_padrao_citacao_de_artigo_cobre_variacoes_reais(texto, deveria_pegar):
+    resultado = bool(llm_client._PADRAO_CITACAO_DE_ARTIGO.search(texto))
+    assert resultado is deveria_pegar, f"esperava {deveria_pegar} para {texto!r}, veio {resultado}"
+
+
+def test_gerar_argumento_recurso_aceita_referencia_generica_sem_numero(monkeypatch):
+    # Prova de que o regex não é gatilho fácil demais -- "dispositivo
+    # legal" sem número nenhum é exatamente o que o prompt pede, e não
+    # pode ser rejeitado.
+    resposta_ok = json.dumps(
+        {
+            "narrativa_suficiente": True,
+            "motivo_insuficiencia": None,
+            "fundamentacao": "conforme o dispositivo legal citado nesta petição, a inabilitação foi indevida",
+            "pedido": "requer-se a reforma da decisão",
+        }
+    )
+    monkeypatch.setattr(llm_client, "LLM_PROVIDER", "gemini")
+    monkeypatch.setattr(llm_client, "_chamar_gemini_recurso", lambda d, t, b, n: resposta_ok)
+
+    resultado = gerar_argumento_recurso("descrição", "trecho", "art. 66 da Lei 14.133/2021", "narrativa")
+    assert resultado["narrativa_suficiente"] is True
+
+
 @pytest.mark.skipif(
     not os.getenv("RODAR_TESTE_GEMINI_REAL"),
     reason=(
@@ -335,3 +495,32 @@ def test_extrair_checklist_chama_api_real_manualmente():
     print(json.dumps(resultado, indent=2, ensure_ascii=False))
 
     assert isinstance(resultado, list)
+
+
+@pytest.mark.skipif(
+    not os.getenv("RODAR_TESTE_GEMINI_REAL"),
+    reason=(
+        "teste manual: chama a API do Gemini de verdade e gasta quota. Só "
+        "roda com RODAR_TESTE_GEMINI_REAL=1 definido e GEMINI_API_KEY real "
+        "no .env."
+    ),
+)
+def test_gerar_argumento_recurso_chama_api_real_manualmente():
+    resultado = gerar_argumento_recurso(
+        descricao_exigencia="Certidão de regularidade do CREA",
+        trecho_exigencia="O licitante deverá apresentar certidão de regularidade junto ao CREA, com validade em dia na data da sessão.",
+        base_legal_exigencia="art. 66 da Lei 14.133/2021",
+        narrativa=(
+            "Situação fictícia de teste: a certidão apresentada tinha validade até "
+            "15/03/2026, e a sessão de habilitação ocorreu em 10/03/2026, dentro do "
+            "prazo. O pregoeiro registrou a inabilitação alegando que o documento "
+            "estava vencido, mas a data de validade impressa no próprio documento "
+            "contradiz essa alegação."
+        ),
+    )
+
+    print("\nResultado da chamada real ao Gemini:")
+    print(json.dumps(resultado, indent=2, ensure_ascii=False))
+
+    assert isinstance(resultado, dict)
+    assert "narrativa_suficiente" in resultado

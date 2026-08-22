@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from google import genai
@@ -119,6 +120,36 @@ _SCHEMA_RESPOSTA_INCONSISTENCIAS = {
         "inconsistencias": {"type": "array", "items": _SCHEMA_INCONSISTENCIA},
     },
     "required": ["inconsistencias"],
+    "additionalProperties": False,
+}
+
+# Fase 4, Camada 1: recurso administrativo contra inabilitação indevida
+# (19/08/2026) — o documento de maior risco do projeto (argumentação
+# jurídica real, não montagem determinística). "narrativa_suficiente"
+# segue o mesmo espírito de "encontrado" no schema de pergunta: um sinal
+# booleano que o código consegue checar, em vez de precisar interpretar
+# texto livre pra saber se a IA recusou. Quando false, "fundamentacao" e
+# "pedido" ficam null — nada de gerar um documento pela metade.
+#
+# DECISÃO DE SEGURANÇA (confirmada com Bruno, 19/08/2026): a IA nunca
+# escreve o número de um artigo/parágrafo/inciso em campo nenhum daqui —
+# nem pra reproduzir a base legal que já veio da exigência. Essa citação
+# é inserida pelo CÓDIGO, deterministicamente (app/geracao/recurso.py),
+# nunca pela IA — elimina de vez o risco dela trocar um número na hora de
+# escrever a prosa (ex.: art. 66 virar art. 68). O prompt de sistema
+# instrui isso explicitamente, e _parsear_resposta_recurso confere de
+# novo por regex depois — não confia só na instrução (mesmo princípio já
+# usado com "trecho" no checklist, onde o validador confere de novo o
+# que a IA disse ter copiado, em vez de aceitar a palavra da IA sozinha).
+_SCHEMA_ARGUMENTO_RECURSO = {
+    "type": "object",
+    "properties": {
+        "narrativa_suficiente": {"type": "boolean"},
+        "motivo_insuficiencia": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "fundamentacao": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "pedido": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    },
+    "required": ["narrativa_suficiente", "motivo_insuficiencia", "fundamentacao", "pedido"],
     "additionalProperties": False,
 }
 
@@ -783,3 +814,222 @@ def _parsear_resposta_inconsistencias(resposta_bruta: str) -> list[dict[str, Any
         )
 
     return inconsistencias
+
+
+# ---------- Recurso administrativo contra inabilitação (Fase 4), Camada 1 ----------
+
+
+def _montar_prompt_sistema_recurso() -> str:
+    return """Você ajuda a estruturar o argumento de um recurso administrativo \
+contra a inabilitação de um licitante numa licitação brasileira regida pela \
+Lei 14.133/2021.
+
+Você recebe três fontes, cada uma tratada de um jeito diferente:
+1. O texto da exigência do edital que motivou a inabilitação — FATO \
+VERIFICADO, veio do próprio edital, já conferido pelo sistema.
+2. O relato do recorrente sobre o que aconteceu — ALEGAÇÃO NÃO VERIFICADA. \
+Você não tem como confirmar se é verdade. Trate sempre como "o recorrente \
+alega que...", nunca como fato provado.
+3. A base legal já identificada para essa exigência, se houver — você pode \
+USAR essa informação pra escrever uma argumentação coerente, mas nunca deve \
+escrever o número de um artigo, parágrafo ou inciso na sua resposta, nem o \
+que foi fornecido a você nem outro. Refira-se a ela de forma genérica (ex.: \
+"o dispositivo legal aplicável a esta exigência", "a base legal citada \
+nesta petição") — a citação exata do artigo é inserida separadamente, fora \
+do que você escreve, justamente pra eliminar o risco de você reproduzir \
+errado um número de artigo na hora de redigir.
+
+Regras que não podem ser quebradas:
+- Nunca invente um fato que o recorrente não descreveu. Se o relato não tem \
+detalhe suficiente pra construir um argumento específico (ex.: menciona "um \
+problema com um documento" sem dizer qual documento, o que aconteceu, ou \
+por que a inabilitação teria sido incorreta), "narrativa_suficiente" deve \
+ser false — não preencha a lacuna com suposição.
+- Nunca cite jurisprudência, número de acórdão, ou qualquer decisão de \
+tribunal — fora do escopo desta versão do sistema.
+- Nunca escreva um número de artigo, parágrafo ou inciso de lei em nenhum \
+campo da resposta (ver item 3 acima).
+- "fundamentacao": prosa argumentativa, em português formal (registro de \
+petição administrativa), conectando o texto da exigência do edital com o \
+relato do recorrente, explicando por que a inabilitação teria sido \
+indevida à luz desses dois elementos.
+- "pedido": o pedido formal do recurso — tipicamente a reconsideração da \
+inabilitação e o prosseguimento do certame com a habilitação do \
+recorrente, adaptado à situação concreta descrita, sem fórmula genérica \
+demais que ignore o que foi relatado.
+- Quando "narrativa_suficiente" é false: "fundamentacao" e "pedido" devem \
+ser null, e "motivo_insuficiencia" explica objetivamente que detalhe está \
+faltando, pra o recorrente completar o relato. Quando "narrativa_suficiente" \
+é true, "motivo_insuficiencia" é null.
+
+Responda em JSON estrito e SOMENTE o JSON — sem markdown, sem \
+```json, sem texto antes ou depois."""
+
+
+def _montar_prompt_usuario_recurso(
+    descricao_exigencia: str, trecho_exigencia: str, base_legal_exigencia: str | None, narrativa: str
+) -> str:
+    base_legal_texto = base_legal_exigencia or "não identificada nesta exigência do checklist"
+    return f"""Exigência do edital que motivou a inabilitação:
+Descrição: {descricao_exigencia}
+Trecho literal do edital: {trecho_exigencia}
+Base legal já identificada para esta exigência: {base_legal_texto}
+
+Relato do recorrente sobre o que aconteceu (alegação não verificada):
+{narrativa}"""
+
+
+# Confere, depois da resposta pronta, que a IA não escreveu nenhum número de
+# artigo/parágrafo/inciso/alínea apesar da instrução do prompt — não confia
+# só na instrução (ver comentário em _SCHEMA_ARGUMENTO_RECURSO). Padrão
+# amplo de propósito: falso positivo aqui só causa uma rejeição cautelosa a
+# mais (RespostaIAError), nunca um risco de segurança — prefere pecar por
+# excesso de cautela num campo onde o custo de errar é real.
+#
+# Testado (19/08/2026, a pedido do Bruno) contra variações reais de como
+# uma citação pode aparecer na prosa, não só o formato único usado no
+# primeiro teste — achou 3 lacunas reais, todas corrigidas aqui:
+#   1. "Artigo nº 66" — a abreviação "nº"/"n.º"/"n°" entre a palavra e o
+#      número não era coberta (só ".", espaço ou nada). Resolvido trocando
+#      o "\.?\s*" fixo por "[^\d]{0,6}" — aceita QUALQUER coisa que não
+#      seja dígito entre a palavra-gatilho e o número (até 6 caracteres),
+#      sem precisar enumerar cada abreviação possível.
+#   2. "parágrafo 5º" (por extenso, sem usar o símbolo §) não era coberta
+#      — só "§" disparava. Acrescentado "parágrafo" como gatilho próprio,
+#      mesma lógica de "[^\d]{0,6}" até o número. "parágrafo único" (sem
+#      número nenhum pra errar, mas ainda uma citação estrutural
+#      específica) entra como caso à parte.
+#   3. "alínea" não era coberta de jeito nenhum. Acrescentada como
+#      gatilho de PALAVRA INTEIRA, sem exigir letra/número logo depois —
+#      "alínea" não tem uso comum em português fora de citação jurídica
+#      formal, então não precisa da mesma cautela de "artigo" (que TEM
+#      sentido comum, ex.: "artigo de jornal" — por isso "artigo" continua
+#      exigindo um número por perto pra disparar). Mesmo raciocínio
+#      aplicado a "inciso" (só usado em citação jurídica formal também) —
+#      antes exigia numeral romano logo depois, agora dispara na palavra
+#      sozinha, mais simples e mais seguro.
+_PADRAO_CITACAO_DE_ARTIGO = re.compile(
+    r"\bart(?:igo)?\b[^\d]{0,6}\d+"
+    r"|§[^\d]{0,6}\d+"
+    r"|\bpar[áa]grafo\b[^\d]{0,6}\d+"
+    r"|\bpar[áa]grafo\s+[úu]nico\b"
+    r"|\binciso\b"
+    r"|\bal[íi]nea\b",
+    re.IGNORECASE,
+)
+
+
+def gerar_argumento_recurso(
+    descricao_exigencia: str,
+    trecho_exigencia: str,
+    base_legal_exigencia: str | None,
+    narrativa: str,
+) -> dict[str, Any]:
+    """Fase 4, Camada 1: estrutura o argumento de um recurso administrativo
+    contra inabilitação, combinando a exigência do edital (fato verificado)
+    com o relato do recorrente (alegação não verificada). Documento de maior
+    risco do projeto — ver decisão de segurança em _SCHEMA_ARGUMENTO_RECURSO.
+
+    Devolve {"narrativa_suficiente": bool, "motivo_insuficiencia": str|None,
+    "fundamentacao": str|None, "pedido": str|None}. Não levanta exceção
+    quando a narrativa é insuficiente (mesmo padrão de "encontrado": False
+    em responder_pergunta) — quem chama (app.pipeline.gerar_recurso_processo)
+    decide o que fazer com o sinal.
+    """
+    if LLM_PROVIDER != "gemini":
+        raise ProvedorNaoSuportadoError(
+            f"provedor de IA '{LLM_PROVIDER}' ainda não está implementado "
+            "(por enquanto só 'gemini' é suportado)"
+        )
+
+    resposta_bruta = _chamar_gemini_recurso(
+        descricao_exigencia, trecho_exigencia, base_legal_exigencia, narrativa
+    )
+    return _parsear_resposta_recurso(resposta_bruta)
+
+
+def _chamar_gemini_recurso(
+    descricao_exigencia: str,
+    trecho_exigencia: str,
+    base_legal_exigencia: str | None,
+    narrativa: str,
+) -> str:
+    if not GEMINI_API_KEY:
+        raise ConfiguracaoAusenteError(
+            "GEMINI_API_KEY não está definida no .env — gere uma chave no "
+            "Google AI Studio e preencha o .env antes de usar a IA"
+        )
+    if not GEMINI_MODEL:
+        raise ConfiguracaoAusenteError(
+            "GEMINI_MODEL não está definido no .env — confirme o nome do "
+            "modelo (ex.: gemini-3.6-flash) e preencha o .env"
+        )
+
+    cliente = genai.Client(api_key=GEMINI_API_KEY)
+
+    # Sem checagem de tamanho de contexto aqui: diferente das duas chamadas
+    # de long-context (Q&A, motor de inconsistências), a entrada é sempre
+    # pequena — uma exigência avulsa + um relato digitado por gente, nunca
+    # perto do limite de 1M tokens do modelo.
+    try:
+        resposta = cliente.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=_montar_prompt_usuario_recurso(
+                descricao_exigencia, trecho_exigencia, base_legal_exigencia, narrativa
+            ),
+            config=types.GenerateContentConfig(
+                system_instruction=_montar_prompt_sistema_recurso(),
+                response_mime_type="application/json",
+                response_json_schema=_SCHEMA_ARGUMENTO_RECURSO,
+                # Mesma temperatura conservadora do resto do sistema (0.1) —
+                # mesmo sendo prosa argumentativa, não extração literal, o
+                # objetivo continua sendo "grudar nos fatos dados", não
+                # criatividade. Ver TEMPERATURA_EXTRACAO.
+                temperature=TEMPERATURA_EXTRACAO,
+                max_output_tokens=MAX_OUTPUT_TOKENS,
+                thinking_config=types.ThinkingConfig(
+                    thinking_level=THINKING_LEVEL_EXTRACAO
+                ),
+            ),
+        )
+    except Exception as erro:
+        raise RespostaIAError(f"falha ao chamar a API do Gemini: {erro}") from erro
+
+    if resposta.text is None:
+        raise RespostaIAError(
+            f"a IA não devolveu texto na resposta (finish_reason: {resposta.candidates[0].finish_reason if resposta.candidates else 'desconhecido'})"
+        )
+
+    return resposta.text
+
+
+def _parsear_resposta_recurso(resposta_bruta: str) -> dict[str, Any]:
+    try:
+        dados = json.loads(resposta_bruta)
+    except json.JSONDecodeError as erro:
+        logger.error("resposta da IA (recurso) não é JSON válido: %r", resposta_bruta)
+        raise RespostaIAError(
+            "a IA não devolveu um JSON válido para o recurso — o conteúdo bruto foi registrado no log"
+        ) from erro
+
+    if not isinstance(dados, dict):
+        raise RespostaIAError(
+            "a IA devolveu um JSON válido, mas não é um objeto com os campos esperados"
+        )
+
+    # Trava extra (ver _PADRAO_CITACAO_DE_ARTIGO): confere de novo, não
+    # confia só na instrução do prompt — mesmo se a IA obedeceu, mas errado.
+    for campo in ("fundamentacao", "pedido"):
+        texto = dados.get(campo)
+        if isinstance(texto, str) and _PADRAO_CITACAO_DE_ARTIGO.search(texto):
+            logger.error(
+                "resposta da IA (recurso) citou número de artigo apesar da instrução -- campo %r: %r",
+                campo, texto,
+            )
+            raise RespostaIAError(
+                f"a IA citou um número de artigo/parágrafo/inciso no campo '{campo}' do recurso, "
+                "apesar da instrução para nunca fazer isso -- recusado por segurança, a citação "
+                "de base legal deve vir só do que o código insere a partir da exigência do checklist"
+            )
+
+    return dados

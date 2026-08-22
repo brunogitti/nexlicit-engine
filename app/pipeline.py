@@ -11,11 +11,13 @@ import time
 from typing import Any
 
 from app.db.repositorio import (
+    RegistroNaoEncontradoError,
     atualizar_status_checklist,
     atualizar_status_deteccao_inconsistencias,
     criar_arquivo,
     limpar_analise_do_processo,
     limpar_inconsistencias_do_processo,
+    obter_exigencia,
     obter_processo,
     obter_texto_paginas,
     salvar_catalogo_itens,
@@ -34,12 +36,27 @@ from app.extracao.tabela_itens import localizar_documento_com_tabela, normalizar
 from app.ia.llm_client import extrair_checklist
 from app.ia.llm_client import detectar_inconsistencias as _detectar_inconsistencias_ia
 from app.ia.llm_client import responder_pergunta as _responder_pergunta_ia
+from app.ia.llm_client import gerar_argumento_recurso as _gerar_argumento_recurso_ia
 from app.ia.llm_client import contar_tokens_comparacao as _contar_tokens_comparacao_ia
 from app.ia.llm_client import LIMITE_TOKENS_POR_MINUTO
 from app.inconsistencias.limite_tr import identificar_blocos_edital_tr
 from app.validacao.validador import validar_exigencias
 
 logger = logging.getLogger(__name__)
+
+# Fase 4, Camada 1 (recurso administrativo, 19/08/2026): inabilitação só
+# decorre de falha em documento de HABILITAÇÃO — as outras duas categorias
+# do checklist (declaracoes_exigidas, requisitos_proposta) pertencem a
+# outra fase do processo licitatório e não geram esse tipo de recurso.
+# Reaproveitado tanto aqui (validação server-side) quanto no formulário
+# (app/rotas/paginas.py, filtro do seletor de exigência) — uma lista só,
+# pra não desalinhar as duas pontas.
+CATEGORIAS_HABILITACAO = (
+    "habilitacao_juridica",
+    "habilitacao_fiscal_social_trabalhista",
+    "qualificacao_economico_financeira",
+    "qualificacao_tecnica",
+)
 
 
 class ProcessoNaoEncontradoError(Exception):
@@ -58,6 +75,20 @@ class ProcessoSemTextoExtraidoError(Exception):
     """O processo existe, mas não tem texto por página salvo (Fase 2, Camada
     0) — ainda não foi analisado (POST /processos/{id}/analisar), ou foi
     analisado antes da Camada 0 existir e precisa ser reprocessado."""
+
+
+class ExigenciaForaDeEscopoDoRecursoError(Exception):
+    """A exigência escolhida não pertence à categoria de habilitação (Fase
+    4, Camada 1) -- inabilitação só decorre de falha em documento de
+    habilitação, ver CATEGORIAS_HABILITACAO."""
+
+
+class NarrativaInsuficienteError(Exception):
+    """A IA avaliou que o relato do recorrente não tem detalhe suficiente
+    pra construir um argumento coerente (campo "narrativa_suficiente" do
+    schema de app.ia.llm_client.gerar_argumento_recurso) -- o documento não
+    é gerado; a mensagem desta exceção é o motivo, pra pessoa completar o
+    relato e tentar de novo."""
 
 
 def _texto_do_documento(documento: DocumentoExtraido) -> str:
@@ -295,6 +326,66 @@ def responder_pergunta_processo(
 
     texto_marcado = _montar_texto_marcado_por_pagina(paginas)
     return _responder_pergunta_ia(texto_marcado, pergunta)
+
+
+def gerar_recurso_processo(
+    processo_id: int, exigencia_id: int, narrativa: str, caminho_banco: str | None = None
+) -> dict[str, Any]:
+    """Fase 4, Camada 1 (19/08/2026): monta o argumento de um recurso
+    administrativo contra a inabilitação motivada por UMA exigência
+    específica do checklist. Documento de maior risco do projeto — ver
+    decisão de segurança sobre base legal em
+    app.ia.llm_client._SCHEMA_ARGUMENTO_RECURSO.
+
+    Confere, nesta ordem: o processo existe; a exigência existe E pertence
+    a este processo (RegistroNaoEncontradoError nos dois casos — não dá
+    pra saber de fora se o id não existe ou pertence a outro processo, e
+    não faz diferença pra quem chama: os dois são "essa exigência não está
+    disponível aqui"); a exigência é de categoria de habilitação
+    (ExigenciaForaDeEscopoDoRecursoError — inabilitação só decorre de
+    falha em documento de habilitação, ver CATEGORIAS_HABILITACAO).
+
+    Levanta NarrativaInsuficienteError se a IA avaliar que o relato não
+    tem detalhe suficiente pra um argumento coerente — a mensagem da
+    exceção é o "motivo_insuficiencia" que a IA devolveu.
+
+    Devolve {"processo": dict, "exigencia": dict, "fundamentacao": str,
+    "pedido": str} — processo e exigência inteiros vão junto pra quem
+    chama (a rota) não precisar buscar de novo pra montar o documento.
+    """
+    processo = obter_processo(processo_id, caminho_banco=caminho_banco)
+    if processo is None:
+        raise ProcessoNaoEncontradoError(f"processo {processo_id} não existe")
+
+    exigencia = obter_exigencia(exigencia_id, caminho_banco=caminho_banco)
+    if exigencia is None or exigencia["processo_id"] != processo_id:
+        raise RegistroNaoEncontradoError(
+            f"exigência {exigencia_id} não existe ou não pertence ao processo {processo_id}"
+        )
+
+    if exigencia["categoria"] not in CATEGORIAS_HABILITACAO:
+        raise ExigenciaForaDeEscopoDoRecursoError(
+            f"exigência {exigencia_id} é da categoria '{exigencia['categoria']}', que não é de "
+            "habilitação -- recurso contra inabilitação só se aplica a exigências de "
+            f"{', '.join(CATEGORIAS_HABILITACAO)}"
+        )
+
+    resultado = _gerar_argumento_recurso_ia(
+        exigencia["descricao"], exigencia["trecho"], exigencia["base_legal"], narrativa
+    )
+
+    if not resultado["narrativa_suficiente"]:
+        raise NarrativaInsuficienteError(
+            resultado["motivo_insuficiencia"]
+            or "o relato não tem detalhe suficiente para construir o argumento do recurso"
+        )
+
+    return {
+        "processo": processo,
+        "exigencia": exigencia,
+        "fundamentacao": resultado["fundamentacao"],
+        "pedido": resultado["pedido"],
+    }
 
 
 # Mesmo padrão de normalização usado pra deduplicar trecho de requisito por

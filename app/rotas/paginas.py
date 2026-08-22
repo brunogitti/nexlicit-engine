@@ -30,6 +30,7 @@ from app.db.repositorio import (
 )
 from app.extracao.tabela_itens import normalizar_com_mapa
 from app.ia.llm_client import CATEGORIAS_CHECKLIST, TIPOS_INCONSISTENCIA
+from app.pipeline import CATEGORIAS_HABILITACAO
 from app.rotas.processos import criar_processo_e_salvar_arquivos
 from app.templates_engine import templates
 
@@ -496,6 +497,37 @@ def tela_planilha_preco(request: Request, id: int):
         request,
         "planilha_preco.html",
         {"processo": processo, "catalogo": catalogo},
+    )
+
+
+@router.get("/processos/{id}/recurso")
+def tela_recurso(request: Request, id: int):
+    """Fase 4, Camada 1 (recurso administrativo, 19/08/2026): formulário
+    pra escolher a exigência que motivou a inabilitação, descrever o que
+    aconteceu, e escolher a empresa. Filtra o seletor de exigência às 4
+    categorias de habilitação (CATEGORIAS_HABILITACAO,
+    app.pipeline) -- inabilitação só decorre de falha nessas, mesma
+    validação que a rota de geração confere de novo no servidor (não
+    confia só neste filtro do formulário)."""
+    processo = obter_processo(id)
+    if processo is None:
+        return templates.TemplateResponse(
+            request,
+            "erro_pagina.html",
+            {"mensagem": f"Processo {id} não encontrado"},
+            status_code=404,
+        )
+
+    exigencias_elegiveis = [
+        {**exigencia, "rotulo_categoria": RÓTULOS_CATEGORIA.get(exigencia["categoria"], exigencia["categoria"])}
+        for exigencia in processo["exigencias"]
+        if exigencia["categoria"] in CATEGORIAS_HABILITACAO
+    ]
+
+    return templates.TemplateResponse(
+        request,
+        "recurso.html",
+        {"processo": processo, "exigencias": exigencias_elegiveis, "empresas": listar_empresas()},
     )
 
 

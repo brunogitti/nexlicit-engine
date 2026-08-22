@@ -876,3 +876,182 @@ def test_gerar_minuta_empresa_sem_representante_devolve_400(cliente_teste, tmp_p
     resposta = cliente_teste.post(f"/processos/{processo_id}/gerar-minuta?empresa_id={empresa_id}")
 
     assert resposta.status_code == 400
+
+
+# ---------- Recurso administrativo (Fase 4, Camada 1, 19/08/2026) ----------
+
+
+def _checklist_com_exigencia_habilitacao(texto_completo, contexto_processo):
+    return [
+        {
+            "categoria": "habilitacao_juridica",
+            "descricao": "Certidão do CREA",
+            "base_legal": "art. 66 da Lei 14.133/2021",
+            "trecho": "O licitante deverá apresentar Certidao Negativa de Debitos.",
+            "obrigatorio_para": "todos",
+        },
+        {
+            "categoria": "declaracoes_exigidas",
+            "descricao": "Declaração qualquer",
+            "base_legal": None,
+            "trecho": "O licitante deverá apresentar Certidao Negativa de Debitos.",
+            "obrigatorio_para": "todos",
+        },
+    ]
+
+
+def _criar_processo_com_exigencia_habilitacao(cliente_teste, tmp_path, monkeypatch) -> tuple[int, int]:
+    caminho_pdf = tmp_path / "edital.pdf"
+    _criar_pdf_exemplo(caminho_pdf)
+    with open(caminho_pdf, "rb") as arquivo:
+        resposta_criacao = cliente_teste.post(
+            "/processos",
+            data={"nome": "Pregão com exigência de habilitação"},
+            files={"arquivos": ("edital.pdf", arquivo, "application/pdf")},
+        )
+    processo_id = resposta_criacao.json()["id"]
+
+    monkeypatch.setattr("app.pipeline.extrair_checklist", _checklist_com_exigencia_habilitacao)
+    cliente_teste.post(f"/processos/{processo_id}/analisar")
+
+    from app.db.repositorio import obter_processo as _obter_processo
+
+    processo = _obter_processo(processo_id)
+    assert processo is not None
+    exigencia_habilitacao = next(e for e in processo["exigencias"] if e["categoria"] == "habilitacao_juridica")
+    return processo_id, exigencia_habilitacao["id"]
+
+
+def _ia_recurso_falsa_suficiente(descricao, trecho, base_legal, narrativa):
+    return {
+        "narrativa_suficiente": True, "motivo_insuficiencia": None,
+        "fundamentacao": "Fundamentação de teste.", "pedido": "Pedido de teste.",
+    }
+
+
+def test_tela_recurso_lista_so_exigencias_de_habilitacao(cliente_teste, tmp_path, monkeypatch):
+    from app.db.repositorio import criar_empresa
+
+    processo_id, exigencia_id = _criar_processo_com_exigencia_habilitacao(cliente_teste, tmp_path, monkeypatch)
+    criar_empresa(_dados_empresa_teste())  # sem empresa, o formulário nem aparece (ver template)
+
+    resposta = cliente_teste.get(f"/processos/{processo_id}/recurso")
+
+    assert resposta.status_code == 200
+    assert f'value="{exigencia_id}"' in resposta.text
+    assert "Declaração qualquer" not in resposta.text  # categoria fora de habilitação, não aparece
+
+
+def test_tela_recurso_processo_inexistente_devolve_404(cliente_teste):
+    resposta = cliente_teste.get("/processos/999999/recurso")
+    assert resposta.status_code == 404
+
+
+def test_gerar_recurso_devolve_docx_valido(cliente_teste, tmp_path, monkeypatch):
+    from app.db.repositorio import criar_empresa
+
+    processo_id, exigencia_id = _criar_processo_com_exigencia_habilitacao(cliente_teste, tmp_path, monkeypatch)
+    empresa_id = criar_empresa(_dados_empresa_teste())
+    monkeypatch.setattr("app.pipeline._gerar_argumento_recurso_ia", _ia_recurso_falsa_suficiente)
+
+    resposta = cliente_teste.post(
+        f"/processos/{processo_id}/gerar-recurso",
+        data={"exigencia_id": exigencia_id, "narrativa": "relato de teste detalhado", "empresa_id": empresa_id},
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert "attachment" in resposta.headers["content-disposition"]
+
+    import io as _io
+
+    import docx as _docx
+
+    documento = _docx.Document(_io.BytesIO(resposta.content))
+    texto_completo = " ".join(p.text for p in documento.paragraphs)
+    assert "MINUTA" in texto_completo and "REVISAR ANTES DE PROTOCOLAR" in texto_completo
+    assert "relato de teste detalhado" in texto_completo
+    assert "art. 66 da Lei 14.133/2021" in texto_completo
+    assert "CONFERIR ANTES DE PROTOCOLAR" in texto_completo
+
+
+def test_gerar_recurso_processo_inexistente_devolve_404(cliente_teste):
+    from app.db.repositorio import criar_empresa
+
+    empresa_id = criar_empresa(_dados_empresa_teste())
+    resposta = cliente_teste.post(
+        "/processos/999999/gerar-recurso",
+        data={"exigencia_id": 1, "narrativa": "relato", "empresa_id": empresa_id},
+    )
+    assert resposta.status_code == 404
+
+
+def test_gerar_recurso_exigencia_fora_de_categoria_de_habilitacao_devolve_400(cliente_teste, tmp_path, monkeypatch):
+    from app.db.repositorio import criar_empresa, obter_processo as _obter_processo
+
+    processo_id, _ = _criar_processo_com_exigencia_habilitacao(cliente_teste, tmp_path, monkeypatch)
+    processo = _obter_processo(processo_id)
+    assert processo is not None
+    exigencia_declaracao = next(e for e in processo["exigencias"] if e["categoria"] == "declaracoes_exigidas")
+    empresa_id = criar_empresa(_dados_empresa_teste())
+
+    resposta = cliente_teste.post(
+        f"/processos/{processo_id}/gerar-recurso",
+        data={"exigencia_id": exigencia_declaracao["id"], "narrativa": "relato", "empresa_id": empresa_id},
+    )
+
+    assert resposta.status_code == 400
+
+
+def test_gerar_recurso_narrativa_insuficiente_devolve_400(cliente_teste, tmp_path, monkeypatch):
+    from app.db.repositorio import criar_empresa
+
+    processo_id, exigencia_id = _criar_processo_com_exigencia_habilitacao(cliente_teste, tmp_path, monkeypatch)
+    empresa_id = criar_empresa(_dados_empresa_teste())
+
+    def ia_falsa(descricao, trecho, base_legal, narrativa):
+        return {
+            "narrativa_suficiente": False,
+            "motivo_insuficiencia": "relato vago demais",
+            "fundamentacao": None, "pedido": None,
+        }
+
+    monkeypatch.setattr("app.pipeline._gerar_argumento_recurso_ia", ia_falsa)
+
+    resposta = cliente_teste.post(
+        f"/processos/{processo_id}/gerar-recurso",
+        data={"exigencia_id": exigencia_id, "narrativa": "algo aconteceu", "empresa_id": empresa_id},
+    )
+
+    assert resposta.status_code == 400
+    assert "vago" in resposta.json()["detail"]
+
+
+def test_gerar_recurso_empresa_inexistente_devolve_404(cliente_teste, tmp_path, monkeypatch):
+    processo_id, exigencia_id = _criar_processo_com_exigencia_habilitacao(cliente_teste, tmp_path, monkeypatch)
+    monkeypatch.setattr("app.pipeline._gerar_argumento_recurso_ia", _ia_recurso_falsa_suficiente)
+
+    resposta = cliente_teste.post(
+        f"/processos/{processo_id}/gerar-recurso",
+        data={"exigencia_id": exigencia_id, "narrativa": "relato de teste", "empresa_id": 999999},
+    )
+
+    assert resposta.status_code == 404
+
+
+def test_gerar_recurso_empresa_sem_representante_devolve_400(cliente_teste, tmp_path, monkeypatch):
+    from app.db.repositorio import criar_empresa
+
+    processo_id, exigencia_id = _criar_processo_com_exigencia_habilitacao(cliente_teste, tmp_path, monkeypatch)
+    dados_sem_representante = {**_dados_empresa_teste(), "representante_legal_nome": None}
+    empresa_id = criar_empresa(dados_sem_representante)
+    monkeypatch.setattr("app.pipeline._gerar_argumento_recurso_ia", _ia_recurso_falsa_suficiente)
+
+    resposta = cliente_teste.post(
+        f"/processos/{processo_id}/gerar-recurso",
+        data={"exigencia_id": exigencia_id, "narrativa": "relato de teste", "empresa_id": empresa_id},
+    )
+
+    assert resposta.status_code == 400

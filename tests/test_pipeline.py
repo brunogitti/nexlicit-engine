@@ -7,14 +7,25 @@ import pytest
 
 from app import pipeline
 from app.db.conexao import obter_conexao
-from app.db.repositorio import criar_processo, obter_catalogo_itens, obter_processo, salvar_preco_item
+from app.db.repositorio import (
+    RegistroNaoEncontradoError,
+    criar_arquivo,
+    criar_processo,
+    obter_catalogo_itens,
+    obter_processo,
+    salvar_exigencias,
+    salvar_preco_item,
+)
 from app.inconsistencias.limite_tr import DeteccaoLimiteTR
 from app.pipeline import (
+    ExigenciaForaDeEscopoDoRecursoError,
+    NarrativaInsuficienteError,
     ProcessoJaAnalisadoError,
     ProcessoNaoEncontradoError,
     ProcessoSemTextoExtraidoError,
     _mesclar_inconsistencias,
     detectar_inconsistencias_processo,
+    gerar_recurso_processo,
     processar_processo,
     responder_pergunta_processo,
 )
@@ -342,6 +353,116 @@ def test_responder_pergunta_processo_sem_analise_da_erro_claro(caminho_db):
 
     with pytest.raises(ProcessoSemTextoExtraidoError, match=str(processo_id)):
         responder_pergunta_processo(processo_id, "pergunta qualquer", caminho_banco=caminho_db)
+
+
+# ---------- gerar_recurso_processo (recurso administrativo, Fase 4, Camada 1) ----------
+
+
+def _processo_com_exigencia(caminho_db, categoria: str = "habilitacao_juridica", base_legal=None) -> tuple[int, int]:
+    processo_id = criar_processo({"nome": "Processo com exigência"}, caminho_banco=caminho_db)
+    criar_arquivo(processo_id, {"nome_arquivo": "edital.pdf", "tipo": "pdf"}, caminho_banco=caminho_db)
+    ids = salvar_exigencias(
+        processo_id,
+        [{
+            "categoria": categoria, "descricao": "Certidão do CREA",
+            "trecho": "apresentar certidão do CREA em dia", "base_legal": base_legal,
+            "arquivo_origem": "edital.pdf", "obrigatorio_para": "todos", "confianca": "localizado",
+        }],
+        caminho_banco=caminho_db,
+    )
+    return processo_id, ids[0]
+
+
+def _ia_falsa_suficiente(descricao, trecho, base_legal, narrativa):
+    return {
+        "narrativa_suficiente": True, "motivo_insuficiencia": None,
+        "fundamentacao": "Fundamentação de teste.", "pedido": "Pedido de teste.",
+    }
+
+
+def test_gerar_recurso_processo_devolve_argumento_com_exigencia(caminho_db, monkeypatch):
+    processo_id, exigencia_id = _processo_com_exigencia(caminho_db, base_legal="art. 66 da Lei 14.133/2021")
+    monkeypatch.setattr(pipeline, "_gerar_argumento_recurso_ia", _ia_falsa_suficiente)
+
+    resultado = gerar_recurso_processo(processo_id, exigencia_id, "relato de teste", caminho_banco=caminho_db)
+
+    assert resultado["processo"]["id"] == processo_id
+    assert resultado["exigencia"]["id"] == exigencia_id
+    assert resultado["fundamentacao"] == "Fundamentação de teste."
+    assert resultado["pedido"] == "Pedido de teste."
+
+
+def test_gerar_recurso_processo_repassa_dados_certos_pra_ia(caminho_db, monkeypatch):
+    processo_id, exigencia_id = _processo_com_exigencia(caminho_db, base_legal="art. 66 da Lei 14.133/2021")
+
+    def ia_falsa(descricao, trecho, base_legal, narrativa):
+        assert descricao == "Certidão do CREA"
+        assert trecho == "apresentar certidão do CREA em dia"
+        assert base_legal == "art. 66 da Lei 14.133/2021"
+        assert narrativa == "relato de teste"
+        return {"narrativa_suficiente": True, "motivo_insuficiencia": None, "fundamentacao": "F", "pedido": "P"}
+
+    monkeypatch.setattr(pipeline, "_gerar_argumento_recurso_ia", ia_falsa)
+
+    gerar_recurso_processo(processo_id, exigencia_id, "relato de teste", caminho_banco=caminho_db)
+
+
+def test_gerar_recurso_processo_inexistente_da_erro_claro(caminho_db):
+    with pytest.raises(ProcessoNaoEncontradoError):
+        gerar_recurso_processo(999999, 1, "relato", caminho_banco=caminho_db)
+
+
+def test_gerar_recurso_processo_exigencia_inexistente_da_erro_claro(caminho_db):
+    processo_id = criar_processo({"nome": "Processo sem exigência"}, caminho_banco=caminho_db)
+
+    with pytest.raises(RegistroNaoEncontradoError):
+        gerar_recurso_processo(processo_id, 999999, "relato", caminho_banco=caminho_db)
+
+
+def test_gerar_recurso_processo_exigencia_de_outro_processo_da_erro_claro(caminho_db):
+    _, exigencia_id_processo_1 = _processo_com_exigencia(caminho_db)
+    processo_2_id = criar_processo({"nome": "Outro processo"}, caminho_banco=caminho_db)
+
+    # exigência existe de verdade, mas pertence ao processo 1, não ao 2 —
+    # não pode vazar pra montar recurso de um processo que não é dela.
+    with pytest.raises(RegistroNaoEncontradoError):
+        gerar_recurso_processo(processo_2_id, exigencia_id_processo_1, "relato", caminho_banco=caminho_db)
+
+
+@pytest.mark.parametrize("categoria", ["declaracoes_exigidas", "requisitos_proposta"])
+def test_gerar_recurso_processo_categoria_fora_de_habilitacao_da_erro_claro(caminho_db, categoria):
+    processo_id, exigencia_id = _processo_com_exigencia(caminho_db, categoria=categoria)
+
+    with pytest.raises(ExigenciaForaDeEscopoDoRecursoError, match=categoria):
+        gerar_recurso_processo(processo_id, exigencia_id, "relato", caminho_banco=caminho_db)
+
+
+@pytest.mark.parametrize(
+    "categoria",
+    ["habilitacao_juridica", "habilitacao_fiscal_social_trabalhista", "qualificacao_economico_financeira", "qualificacao_tecnica"],
+)
+def test_gerar_recurso_processo_aceita_as_4_categorias_de_habilitacao(caminho_db, monkeypatch, categoria):
+    processo_id, exigencia_id = _processo_com_exigencia(caminho_db, categoria=categoria)
+    monkeypatch.setattr(pipeline, "_gerar_argumento_recurso_ia", _ia_falsa_suficiente)
+
+    resultado = gerar_recurso_processo(processo_id, exigencia_id, "relato", caminho_banco=caminho_db)
+    assert resultado["exigencia"]["categoria"] == categoria
+
+
+def test_gerar_recurso_processo_narrativa_insuficiente_levanta_erro_com_motivo(caminho_db, monkeypatch):
+    processo_id, exigencia_id = _processo_com_exigencia(caminho_db)
+
+    def ia_falsa(descricao, trecho, base_legal, narrativa):
+        return {
+            "narrativa_suficiente": False,
+            "motivo_insuficiencia": "faltou informar qual documento foi considerado irregular",
+            "fundamentacao": None, "pedido": None,
+        }
+
+    monkeypatch.setattr(pipeline, "_gerar_argumento_recurso_ia", ia_falsa)
+
+    with pytest.raises(NarrativaInsuficienteError, match="documento"):
+        gerar_recurso_processo(processo_id, exigencia_id, "relato vago", caminho_banco=caminho_db)
 
 
 # ---------- detectar_inconsistencias_processo (motor de inconsistências, Camada 1) ----------

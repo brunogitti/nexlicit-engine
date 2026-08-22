@@ -769,6 +769,21 @@ def excluir_processo(processo_id: int, caminho_banco: str | None = None) -> None
         conexao.close()
 
 
+def obter_exigencia(id: int, caminho_banco: str | None = None) -> dict[str, Any] | None:
+    """Devolve UMA exigência avulsa (não o processo inteiro) — None se o id
+    não existir. Usada pelo recurso administrativo (Fase 4, Camada 1,
+    19/08/2026): a pessoa escolhe uma exigência específica pra contestar,
+    não o processo todo, e a rota precisa validar que essa exigência
+    pertence ao processo informado antes de gerar qualquer documento
+    (ver app.pipeline.gerar_recurso_processo)."""
+    conexao = obter_conexao(caminho_banco)
+    try:
+        linha = conexao.execute("SELECT * FROM exigencia WHERE id = ?", (id,)).fetchone()
+        return _linha_exigencia_para_dict(linha) if linha is not None else None
+    finally:
+        conexao.close()
+
+
 def atualizar_status_exigencia(
     id: int,
     novo_status: str,
